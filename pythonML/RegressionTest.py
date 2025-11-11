@@ -3,7 +3,8 @@ import numpy as np
 import json
 
 # Read the CSV file
-df = pd.read_csv('./data/triangular_heisenberg_sweep.csv')
+#df = pd.read_csv('./data/triangular_heisenberg_sweep.csv')
+df = pd.read_csv('./data/honeycomb_heisenberg_sweep.csv')
 
 # Convert string lists to actual lists using pandas and numpy
 for col in ['data', 'disp']:
