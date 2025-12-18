@@ -7,7 +7,7 @@ import numpy as np
 # import model + train/test helpers from your module
 #from pythonML.AutoEncoderClass import FCautoencoder, train, test
 from AutoEncoderClass import FCautoencoder, train, test
-from AutoEncoderClass import ConvEncoder, TransformerEncoder
+from AutoEncoderClass import ConvEncoder, TransformerEncoder,Conv1DEncoder
 
 # --- Config ---
 CSV_PATH = './data/honeycomb_heisenberg_sweep.csv' #'./data/triangular_heisenberg_sweep.csv'
@@ -52,9 +52,12 @@ val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, drop_last=
 
 # --- Model ---
 input_dim = X.shape[1]
+#print(X.shape)
 model = FCautoencoder(input_dim=input_dim, hidden_dim=1024, latent_dim=3).to(DEVICE)
 #model = ConvEncoder(input_dim=input_dim, hidden_dim=1024, latent_dim=3,kernel_size=3).to(DEVICE)
 #model = TransformerEncoder(input_dim=input_dim, hidden_dim=1024, latent_dim=3).to(DEVICE)
+#model = Conv1DEncoder(input_dim=input_dim,hidden_dim=128, latent_dim=3, kernel_size=3).to(DEVICE)
+
 optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=DW)
 # print number of parameters
 n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -67,12 +70,12 @@ for epoch in range(1, EPOCHS + 1):
     test(model, val_loader, cur_step=epoch, writer=None, device=DEVICE)
 
 # save checkpoint at only the final epoch
-torch.save({
-    "epoch": EPOCHS,
-    "model_state": model.state_dict(),
-    "optimizer_state": optimizer.state_dict(),
-    "X_mean": X_mean,
-    "X_std": X_std,
-}, os.path.join(MODEL_OUT, f"FCAE_HC_epoch{EPOCHS}.pth"))
+# torch.save({
+#     "epoch": EPOCHS,
+#     "model_state": model.state_dict(),
+#     "optimizer_state": optimizer.state_dict(),
+#     "X_mean": X_mean,
+#     "X_std": X_std,
+# }, os.path.join(MODEL_OUT, f"FCAE_HC_epoch{EPOCHS}.pth"))
 
-print("Training finished. Models saved to:", MODEL_OUT)
+# print("Training finished. Models saved to:", MODEL_OUT)

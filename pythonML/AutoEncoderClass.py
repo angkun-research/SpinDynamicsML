@@ -6,6 +6,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision.models as models
 from tqdm.auto import tqdm
 import numpy as np
 
@@ -35,9 +36,11 @@ class FCautoencoder(nn.Module):
         hidden_dim (int): dimension of hidden layers
         latent_dim (int): dimension of latent space (should be 3 for J1,J2,J3)
     """
-    def __init__(self,input_dim, hidden_dim=1024,latent_dim=3):
+    def __init__(self,input_dim, hidden_dim=1024,latent_dim=3,mag_recon_loss=1.0, ifdecode=False):
         super(FCautoencoder, self).__init__()
         self.latent_dim = latent_dim
+        self.mag_recon_loss = mag_recon_loss
+        self.ifdecode = ifdecode
         self.encoder = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.SiLU(), # Swish activation function
@@ -99,36 +102,26 @@ class FCautoencoder(nn.Module):
         #     x = x.view(x.size(0), -1)
 
         # y is required — validate / reshape
-        if y is None:
-            raise ValueError("y (target J parameters) must be provided to forward().")
-        # collapse extra dims and keep only first latent_dim entries
-        if y.dim() == 1:
-            y = y.view(-1, self.latent_dim)
-        elif y.dim() > 2:
-            y = y.view(y.size(0), -1)[:, :self.latent_dim]
-        else:
-            # y.dim() == 2 -> ensure correct width
-            if y.size(1) < self.latent_dim:
-                raise ValueError(f"y must have at least {self.latent_dim} values per sample, got {y.size(1)}")
-
-        if y.size(1) != self.latent_dim:
-            # if more columns present, truncate to latent_dim
-            y = y[:, :self.latent_dim].contiguous()
 
         z = self.encode(x)
         recon_x = self.decode(z)
+        if self.ifdecode:
+            recon_x = self.decode(z)
+        else:
+            recon_x = torch.zeros_like(x)  # set to zero tensor of same shape as x
 
         if not compute_loss:
-            return AutoEncoderOutput(
-                z = z,
-                x_recon = recon_x,
-                loss = None,
-                loss_recon = None,
-                latent_loss = None,
-            )
+            return AutoEncoderOutput(z=z, x_recon=recon_x, loss=None, loss_recon=None, latent_loss=None)
+
+        if self.ifdecode:
+            loss_recon = F.mse_loss(recon_x, x, reduction='mean') * self.mag_recon_loss
+        else:
+            loss_recon = torch.tensor(0.0, device=x.device)
+
 
         # reconstruction loss (keep previous offset if desired)
-        loss_recon = F.mse_loss(recon_x, x, reduction='mean') #reduction='sum')
+        #loss_recon = F.mse_loss(recon_x, x, reduction='mean')*self.mag_recon_loss #reduction='sum')
+        #loss_recon = F.mse_loss(recon_x, x, reduction='sum') 
         # supervised latent loss: compare z to provided true J parameters if available,
         target_J = y.to(z.dtype).to(z.device)
         loss_latent = F.mse_loss(z, target_J, reduction='sum')
@@ -221,10 +214,11 @@ class ConvEncoder(nn.Module):
         hidden_dim (int): dimension of hidden layers
         latent_dim (int): dimension of latent space (should be 3 for J1,J2,J3)
     """
-    def __init__(self,input_dim, hidden_dim=1024,latent_dim=3, kernel_size=3):
+    def __init__(self,input_dim, hidden_dim=1024,latent_dim=3, kernel_size=3,mag_recon_loss=1.0):
         super(ConvEncoder, self).__init__()
         self.latent_dim = latent_dim
         self.input_dim = input_dim
+        self.mag_recon_loss = mag_recon_loss
         self.kernel_size = kernel_size
         dim1 = int(np.sqrt(hidden_dim))
         while hidden_dim % dim1 != 0:
@@ -321,7 +315,7 @@ class ConvEncoder(nn.Module):
             )
 
         # reconstruction loss (keep previous offset if desired)
-        loss_recon = F.mse_loss(recon_x, x, reduction='mean') #reduction='sum')
+        loss_recon = F.mse_loss(recon_x, x, reduction='mean') * self.mag_recon_loss #reduction='sum')
         # supervised latent loss: compare z to provided true J parameters if available,
         target_J = y.to(z.dtype).to(z.device)
         loss_latent = F.mse_loss(z, target_J, reduction='sum')
@@ -345,9 +339,10 @@ class TransformerEncoder(nn.Module):
         hidden_dim (int): dimension of hidden layers
         latent_dim (int): dimension of latent space (should be 3 for J1,J2,J3)
     """
-    def __init__(self,input_dim, hidden_dim=1024,latent_dim=3, n_layers=2, n_heads=4):
+    def __init__(self,input_dim, hidden_dim=1024,latent_dim=3, n_layers=2, n_heads=4,mag_recon_loss=1.0):
         super(TransformerEncoder, self).__init__()
         self.latent_dim = latent_dim
+        self.mag_recon_loss = mag_recon_loss
         d_feature = int(np.sqrt(hidden_dim))
         while hidden_dim % d_feature != 0:
             d_feature -= 1
@@ -464,7 +459,7 @@ class TransformerEncoder(nn.Module):
             )
 
         # reconstruction loss (keep previous offset if desired)
-        loss_recon = F.mse_loss(recon_x, x, reduction='mean') #reduction='sum')
+        loss_recon = F.mse_loss(recon_x, x, reduction='mean') * self.mag_recon_loss #reduction='sum')
         # supervised latent loss: compare z to provided true J parameters if available,
         target_J = y.to(z.dtype).to(z.device)
         loss_latent = F.mse_loss(z, target_J, reduction='sum')
@@ -480,8 +475,663 @@ class TransformerEncoder(nn.Module):
         )
 
 
+class Conv1DEncoder(nn.Module):
+    """
+    Convolutional Autoencoder (supervised latent) class.
+    Args:
+        input_dim (int): dimension of input data
+        hidden_dim (int): dimension of hidden layers
+        latent_dim (int): dimension of latent space (should be 3 for J1,J2,J3)
+    """
+    def __init__(self,input_dim,in_channels=1, hidden_dim=128,latent_dim=3, kernel_size=3,mag_recon_loss=1.0):
+        super(Conv1DEncoder, self).__init__()
+        self.latent_dim = latent_dim
+        self.input_dim = input_dim
+        self.mag_recon_loss = mag_recon_loss
+        self.kernel_size = kernel_size
+        pad = (kernel_size-1) // 2
+        #print(f"pad size: {pad}")
+
+        self.encoder = nn.Sequential(
+            nn.Conv1d(in_channels, hidden_dim, kernel_size=kernel_size, padding=pad),
+            nn.SiLU(), # Swish activation function
+            nn.AdaptiveAvgPool1d(1),  # Ensure fixed output, shape (B, hidden_dim, 1)
+            nn.Flatten(),  # Flatten back to 1D
+            nn.Linear(hidden_dim, hidden_dim),  # Adjust dimensions for Conv2d output
+            nn.SiLU(),
+            nn.Linear(hidden_dim, latent_dim),
+            nn.Tanh(),  # constrain latent space to [-1,1]
+        )
+        # Latent space is J1, J2, J3
+        self.decoder = nn.Sequential(
+            nn.Linear(latent_dim, hidden_dim),
+            nn.SiLU(),
+            nn.Linear(hidden_dim, hidden_dim*input_dim),  # Adjust dimensions for Conv2d output
+            nn.SiLU(),
+            nn.Unflatten(1, (hidden_dim, input_dim)),  # Reshape to (batch_size, channels=hidden_dim, width=1)
+            #nn.Linear(hidden_dim, input_dim),  # expand to (B, hidden_dim, input_dim)
+            nn.ConvTranspose1d(hidden_dim, in_channels, kernel_size=kernel_size, padding=pad,output_padding=pad-1),  # Transpose Conv2d layer
+            nn.Flatten(),  # Flatten back to 1D
+        )
+    
+    def encode(self, x, eps: float = 1e-8):
+        """
+        Encodes the input into the latent space.
+        Args:
+            x (torch.Tensor): Input data
+        Returns:
+            torch.Tensor: Encoded data in the latent space
+        """
+        #print("Encoded x shape:", x.shape)
+        z = self.encoder(x)
+        return z
+
+    def decode(self, z):
+        """
+        Decodes the data from the latent space to the original input space.
+        Args:
+            z (torch.Tensor): Data in the latent space
+        Returns:
+            torch.Tensor: Reconstructed data in the original input space
+        """
+        recon_x = self.decoder(z)
+        # reshape to (B, input_dim)
+        #recon_x = recon_x.view(recon_x.size(0), -1)
+        return recon_x
+    
+    def forward(self, x, y: Optional[torch.Tensor] = None, compute_loss: bool = True):
+        # convert from (B, input_dim) to (B, in_channels, input_dim)
+        x_shape = x.view(x.size(0), 1, x.size(1))
+        # encode / decode
+        z = self.encode(x_shape)
+        recon_x = self.decode(z)
+
+        if not compute_loss:
+            return AutoEncoderOutput(z=z, x_recon=recon_x, loss=None, loss_recon=None, latent_loss=None)
+
+        loss_recon = F.mse_loss(recon_x, x, reduction='mean') * self.mag_recon_loss
+        target_J = y.to(z.dtype).to(z.device)
+        loss_latent = F.mse_loss(z, target_J, reduction='sum')
+        loss = loss_recon + loss_latent
+
+        return AutoEncoderOutput(z=z, x_recon=recon_x, loss=loss, loss_recon=loss_recon, latent_loss=loss_latent)
 
 
 
 
 
+class ConvDownSampling(nn.Module):
+    def __init__(self, D_K, D_E, in_channels=1, base_channels=32, latent_dim=3,kernel_size=3, mag_recon_loss=1.0):
+        super(ConvDownSampling, self).__init__()
+        self.input_h = D_K
+        self.input_w = D_E
+        self.in_channels = in_channels
+        self.latent_dim = latent_dim
+        self.mag_recon_loss = mag_recon_loss
+        outpadding = (kernel_size - 1) % 2
+
+        # Encoder conv stack: three downsampling conv blocks (stride=2)
+        self.encoder = nn.Sequential(
+            # Input: (B, C, 100,300) -> Output: (B, 32, 50, 150)
+            nn.Conv2d(in_channels, base_channels, kernel_size=kernel_size, stride=2, padding=1),
+            nn.BatchNorm2d(base_channels),
+            nn.LeakyReLU(0.1), # Leaky is often better for gradients in physics nets
+            
+            # Input: (B, 32, 50, 150) -> Output: (B, 64, 25, 75)
+            nn.Conv2d(base_channels, base_channels*2, kernel_size=kernel_size, stride=2, padding=1),
+            nn.BatchNorm2d(base_channels*2),
+            nn.LeakyReLU(0.1),
+            
+            # Input: (B, 64, 25, 75) -> Output: (B, 128, 13, 38)
+            nn.Conv2d(base_channels*2, base_channels*4, kernel_size=kernel_size, stride=2, padding=1),
+            nn.BatchNorm2d(base_channels*4),
+            nn.LeakyReLU(0.1),
+            
+            # Input: (B, 128, 13, 38) -> Output: (B, 256, 7, 19)
+            nn.Conv2d(base_channels*4, base_channels*8, kernel_size=kernel_size, stride=2, padding=1),
+            nn.BatchNorm2d(base_channels*8),
+            nn.LeakyReLU(0.1),
+        )
+        # Calculate feature map size dynamically
+        with torch.no_grad():
+            dummy = torch.zeros(1, self.in_channels, self.input_h, self.input_w)
+            dummy_out = self.encoder(dummy)
+            self.feature_c = dummy_out.shape[1]
+            self.feature_h = dummy_out.shape[2]
+            self.feature_w = dummy_out.shape[3]
+            self.flat_dim = self.feature_c * self.feature_h * self.feature_w
+
+        # Bottleneck
+        self.to_params = nn.Linear(self.flat_dim, latent_dim)
+        self.from_params = nn.Linear(latent_dim, self.flat_dim)
+        
+        # --- DECODER ---
+        self.decoder = nn.Sequential(
+            # Input: (B, 256, 7, 19) -> Output: (B, 128, 13, 38)
+            nn.ConvTranspose2d(base_channels*8, base_channels*4, kernel_size=kernel_size, stride=2, padding=1, output_padding=1),
+            nn.BatchNorm2d(base_channels*4),
+            nn.LeakyReLU(0.1),
+            # Input: (B, 128, 13, 38) -> Output: (B, 64, 25, 75)
+            nn.ConvTranspose2d(base_channels*4, base_channels*2, kernel_size=kernel_size, stride=2, padding=1, output_padding=1),
+            nn.BatchNorm2d(base_channels*2),
+            nn.LeakyReLU(0.1),
+            # Input: (B, 64, 25, 75) -> Output: (B, 32, 50, 150)
+            nn.ConvTranspose2d(base_channels*2, base_channels, kernel_size=kernel_size, stride=2, padding=1, output_padding=1),
+            nn.BatchNorm2d(base_channels),
+            nn.LeakyReLU(0.1),
+            # Input: (B, 32, 50, 150) -> Output: (B, 1, 100, 300)
+            nn.ConvTranspose2d(base_channels, in_channels, kernel_size=kernel_size, stride=2, padding=1, output_padding=1),
+            nn.Tanh() 
+        )
+
+
+    def encode(self, x):
+        # 1. Encode
+        features = self.encoder(x)
+        features_flat = torch.flatten(features, start_dim=1)
+        
+        # 2. Bottleneck (Latent Space = Hamiltonian Parameters)
+        z = self.to_params(features_flat)
+        z = nn.Tanh()(z)  # constrain latent space to [-1,1]
+        return z
+
+    def decode(self, z):
+        # 3. Decode
+        reconstruction_input = self.from_params(z)
+        
+        # Reshape back to (B, Channels, H, W) for the ConvTranspose layers
+        reconstruction_input = reconstruction_input.view(
+            -1, self.feature_c, self.feature_h, self.feature_w
+        )
+        
+        reconstruction = self.decoder(reconstruction_input)
+        # 4. FIX: Interpolate if dimensions don't match (e.g. 112 vs 100, 292 vs 300)
+        if reconstruction.shape[-2:] != (self.input_h, self.input_w):
+             reconstruction = F.interpolate(
+                 reconstruction, 
+                 size=(self.input_h, self.input_w), 
+                 mode='bilinear', 
+                 align_corners=False
+             )
+        return reconstruction
+
+    def forward(self, x, y: Optional[torch.Tensor] = None, compute_loss: bool = True):
+        if x.dim() == 2:
+            x = x.view(-1, self.in_channels, self.input_h, self.input_w)
+        # encode / decode
+        z = self.encode(x)
+        recon_x = self.decode(z)
+
+        if not compute_loss:
+            return AutoEncoderOutput(z=z, x_recon=recon_x, loss=None, loss_recon=None, latent_loss=None)
+
+        loss_recon = F.mse_loss(recon_x, x, reduction='mean') * self.mag_recon_loss
+        target_J = y.to(z.dtype).to(z.device)
+        loss_latent = F.mse_loss(z, target_J, reduction='sum')
+        loss = loss_recon + loss_latent
+
+        return AutoEncoderOutput(z=z, x_recon=recon_x, loss=loss, loss_recon=loss_recon, latent_loss=loss_latent)
+
+
+
+
+class SimpleConvAutoencoder(nn.Module):
+    def __init__(self, D_K, D_E, in_channels=1, base_channels=32, latent_dim=3,kernel_size=3, mag_recon_loss=1.0):
+        super(SimpleConvAutoencoder, self).__init__()
+        self.input_h = D_K
+        self.input_w = D_E
+        self.in_channels = in_channels
+        self.latent_dim = latent_dim
+        self.mag_recon_loss = mag_recon_loss
+        self.base_channels = base_channels
+
+        # We use padding=1 with kernel=3 to keep size EXACTLY the same.
+        self.encoder = nn.Sequential(
+            # Layer 1: (B, 1, 100, 300) -> (B, 16, 100, 300)
+            nn.Conv2d(in_channels, base_channels, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(base_channels),
+            nn.LeakyReLU(0.1),
+            
+            # Layer 2: (B, 16, 100, 300) -> (B, 32, 100, 300)
+            nn.Conv2d(base_channels, base_channels*2, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(base_channels*2),
+            nn.LeakyReLU(0.1)
+        )
+        # Calculate Flattened Size
+        # Since we didn't downsample, it's just H * W * Channels
+        self.flat_dim = (base_channels * 2) * self.input_h * self.input_w
+        # Bottleneck (Huge Linear Layer)
+        self.to_params = nn.Linear(self.flat_dim, latent_dim)
+        self.from_params = nn.Linear(latent_dim, self.flat_dim)
+        
+        # --- DECODER (Symmetric) ---
+        # Note: We use Conv2d here too! No need for Transpose because size is constant.
+        self.decoder = nn.Sequential(
+            # Layer 1: (B, 32, 100, 300) -> (B, 16, 100, 300)
+            nn.Conv2d(base_channels*2, base_channels, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(base_channels),
+            nn.LeakyReLU(0.1),
+            
+            # Layer 2: (B, 16, 100, 300) -> (B, 1, 100, 300)
+            nn.Conv2d(base_channels, in_channels, kernel_size=3, stride=1, padding=1),
+            # Final activation to match data range (e.g., Tanh for -1 to 1)
+            nn.Tanh() 
+        )
+
+
+    def encode(self, x):
+        # 1. Encode
+        features = self.encoder(x)
+        features_flat = torch.flatten(features, start_dim=1)
+        
+        # 2. Bottleneck (Latent Space = Hamiltonian Parameters)
+        z = self.to_params(features_flat)
+        z = nn.Tanh()(z)  # constrain latent space to [-1,1]
+        return z
+
+    def decode(self, z):
+        # 3. Decode
+        reconstruction_input = self.from_params(z)
+        
+        # Reshape back to (B, Channels, H, W) for the ConvTranspose layers
+        reconstruction_input = reconstruction_input.view(
+            -1, self.base_channels * 2, self.input_h, self.input_w
+        )
+        
+        reconstruction = self.decoder(reconstruction_input)
+        return reconstruction
+
+    def forward(self, x, y: Optional[torch.Tensor] = None, compute_loss: bool = True):
+        if x.dim() == 2:
+            x = x.view(-1, self.in_channels, self.input_h, self.input_w)
+        # encode / decode
+        z = self.encode(x)
+        recon_x = self.decode(z)
+
+        if not compute_loss:
+            return AutoEncoderOutput(z=z, x_recon=recon_x, loss=None, loss_recon=None, latent_loss=None)
+
+        loss_recon = F.mse_loss(recon_x, x, reduction='mean') * self.mag_recon_loss
+        target_J = y.to(z.dtype).to(z.device)
+        loss_latent = F.mse_loss(z, target_J, reduction='sum')
+        loss = loss_recon + loss_latent
+
+        return AutoEncoderOutput(z=z, x_recon=recon_x, loss=loss, loss_recon=loss_recon, latent_loss=loss_latent)
+
+
+
+class ViTAutoencoder(nn.Module):
+    def __init__(self, 
+                 D_K, D_E, 
+                 patch_size=10, 
+                 in_channels=1, 
+                 embed_dim=128, 
+                 latent_dim=3, 
+                 num_heads=4, 
+                 num_layers=4,
+                mag_recon_loss=1.0):
+        super().__init__()
+        
+        self.mag_recon_loss = mag_recon_loss
+        self.img_h, self.img_w = D_K, D_E
+        self.patch_size = patch_size
+        self.embed_dim = embed_dim
+        self.in_channels = in_channels
+        
+        # Calculate number of patches
+        # 100/10 = 10, 300/10 = 30 -> 10 * 30 = 300 patches
+        self.grid_h = self.img_h // patch_size
+        self.grid_w = self.img_w // patch_size
+        self.num_patches = self.grid_h * self.grid_w
+        
+        # --- ENCODER ---
+        # 1. Patch Embedding (We use a Conv2d with stride=patch_size to do this fast)
+        self.patch_embed = nn.Conv2d(in_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
+        
+        # 2. Positional Embedding (Learnable locations)
+        # We add 1 for the [CLS] token (the token that will hold the parameters)
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+        self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches + 1, embed_dim))
+        
+        # 3. Transformer Encoder Blocks
+        encoder_layer = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=num_heads, batch_first=True)
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        
+        # 4. Bottleneck: [CLS] token -> Hamiltonian Params
+        self.to_params = nn.Sequential(
+            nn.LayerNorm(embed_dim),
+            nn.Linear(embed_dim, latent_dim)
+        )
+        
+        # --- DECODER ---
+        # 1. Expand Latent -> Sequence
+        # We map the 3 params back to a full sequence of 300 patches
+        self.from_params = nn.Linear(latent_dim, self.num_patches * embed_dim)
+        
+        # 2. Decoder Positional Embedding
+        self.decoder_pos_embed = nn.Parameter(torch.zeros(1, self.num_patches, embed_dim))
+        
+        # 3. Transformer Decoder Blocks
+        decoder_layer = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=num_heads, batch_first=True)
+        self.transformer_decoder = nn.TransformerEncoder(decoder_layer, num_layers=num_layers)
+        
+        # 4. Un-patchify: Project embeddings back to pixel values
+        # Output dim = patch_height * patch_width * channels (e.g., 10*10*1 = 100 pixels per patch)
+        self.pixel_pred = nn.Linear(embed_dim, patch_size * patch_size * in_channels)
+
+    def encode(self, x):
+        B = x.shape[0]
+        # --- ENCODE ---
+        # 1. Create Patches: (B, C, H, W) -> (B, Embed_Dim, Grid_H, Grid_W)
+        x_patches = self.patch_embed(x)
+        # 2. Flatten to Sequence: (B, Embed_Dim, Num_Patches) -> (B, Num_Patches, Embed_Dim)
+        x_patches = x_patches.flatten(2).transpose(1, 2)
+        # 3. Append [CLS] token
+        cls_tokens = self.cls_token.expand(B, -1, -1)
+        x_seq = torch.cat((cls_tokens, x_patches), dim=1)
+        # 4. Add Position Embeddings
+        x_seq = x_seq + self.pos_embed
+        # 5. Apply Transformer
+        x_encoded = self.transformer_encoder(x_seq)
+        # 6. Extract [CLS] token for Latent Variables
+        cls_out = x_encoded[:, 0]
+        z = self.to_params(cls_out) # This is your J1, J2, etc.
+        z = nn.Tanh()(z)  # constrain latent space to [-1,1]
+        return z
+    
+    def decode(self, z):
+        B = z.shape[0]
+        # --- DECODE ---
+        # 1. Map parameters back to sequence
+        decoder_input = self.from_params(z)
+        decoder_input = decoder_input.view(B, self.num_patches, self.embed_dim)
+        # 2. Add Decoder Positional Embeddings
+        decoder_input = decoder_input + self.decoder_pos_embed
+        # 3. Apply Transformer Decoder
+        x_decoded = self.transformer_decoder(decoder_input)
+        # 4. Project to Pixels
+        # (B, Num_Patches, Pixels_Per_Patch)
+        patches_reconstructed = self.pixel_pred(x_decoded)
+        # 5. Reassemble Patches into Image (Unpatchify)
+        # This requires some dimension shuffling
+        # Current: (B, Grid_H * Grid_W, P*P*C)
+        # Target:  (B, C, H, W)
+        # Split pixels back to (P, P)
+        patches_reconstructed = patches_reconstructed.view(
+            B, self.grid_h, self.grid_w, self.patch_size, self.patch_size
+        )
+        # Permute to (B, Grid_H, P, Grid_W, P) to align rows/cols
+        # Then combine dimensions
+        recon_image = torch.einsum('bhwqp->bhqwp', patches_reconstructed)
+        recon_image = recon_image.reshape(B, 1, self.img_h, self.img_w)
+        return recon_image
+
+    def forward(self, x, y=None, compute_loss=True):
+        if x.dim() == 2:
+            x = x.view(-1, self.in_channels, self.img_h, self.img_w)
+        # encode / decode
+        z = self.encode(x)
+        recon_x = self.decode(z)
+        
+        if not compute_loss:
+            return AutoEncoderOutput(z=z, x_recon=recon_x, loss=None, loss_recon=None, latent_loss=None)
+
+        loss_recon = F.mse_loss(recon_x, x, reduction='mean') * self.mag_recon_loss
+        target_J = y.to(z.dtype).to(z.device)
+        loss_latent = F.mse_loss(z, target_J, reduction='sum')
+        loss = loss_recon + loss_latent
+
+        return AutoEncoderOutput(z=z, x_recon=recon_x, loss=loss, loss_recon=loss_recon, latent_loss=loss_latent)
+
+
+
+
+class Conv1DAutoencoder(nn.Module):
+    """
+    Two independent 1D-conv pipelines (rows and columns). Each pipeline:
+      - encodes sequences with Conv1d and AdaptiveAvgPool1d(1) -> per-row / per-col descriptors
+      - descriptors are concatenated and mapped to latent (to_params)
+    Decoder (reversed):
+      - map latent -> concatenated descriptors (from_params)
+      - split into row / column descriptor sets
+      - expand each descriptor to a full 1D sequence via a small linear head
+      - refine with Conv1d and project to pixel values
+      - combine row- and column-based reconstructions (average) -> final image
+    """
+    def __init__(self, D_K, D_E, in_channels=1, base_channels=32, latent_dim=3,kernel_size=3, 
+                 mag_recon_loss=1.0, ifdecode = True):
+        super(Conv1DAutoencoder, self).__init__()
+        self.input_h = D_K
+        self.input_w = D_E
+        self.in_channels = in_channels
+        self.latent_dim = latent_dim
+        self.mag_recon_loss = mag_recon_loss
+        self.base_channels = base_channels
+        self.ifdecode = ifdecode
+
+        pad = kernel_size // 2
+        # conv that runs across each row (convolve over width / energy axis)
+        self.conv_row = nn.Conv1d(in_channels, base_channels, kernel_size=kernel_size, padding=pad)
+        # conv that runs across each column (convolve over height / momentum axis)
+        self.conv_col = nn.Conv1d(in_channels, base_channels, kernel_size=kernel_size, padding=pad)
+
+        # pool each 1D output to a single descriptor per row/column
+        self.pool = nn.AdaptiveAvgPool1d(1)
+
+        # combined feature size: H * row_channels + W * col_channels
+        self.combined_dim = self.input_h * base_channels + self.input_w * base_channels
+
+        # bottleneck / decoder heads
+        self.to_params = nn.Linear(self.combined_dim, latent_dim)
+        # decode back to flattened image
+        self.from_params = nn.Linear(latent_dim, self.combined_dim)
+
+        # Decoder expansion heads: pooled descriptor -> full 1D sequence
+        # For rows: expand each (base_channels) descriptor to base_channels * W then reshape to (base_channels, W)
+        self.row_expand = nn.Linear(base_channels, base_channels * self.input_w)
+        # For columns: expand to base_channels * H
+        self.col_expand = nn.Linear(base_channels, base_channels * self.input_h)
+
+        # small conv refinement after expansion (keeps dims constant)
+        self.conv_row_refine = nn.Conv1d(base_channels, base_channels, kernel_size=kernel_size, padding=pad)
+        self.conv_col_refine = nn.Conv1d(base_channels, base_channels, kernel_size=kernel_size, padding=pad)
+
+        # project channel dimension down to image channels (usually 1)
+        self.to_pixel_row = nn.Conv1d(base_channels, in_channels, kernel_size=1)
+        self.to_pixel_col = nn.Conv1d(base_channels, in_channels, kernel_size=1)
+
+        self.act = nn.LeakyReLU(0.1)
+        self.final_act = nn.Tanh()
+
+
+    def encode(self, x):
+        # expected x: (B, C, H, W)
+        B = x.shape[0]
+        # Row-wise conv: treat each row as a sequence of length W
+        # reshape -> (B * H, C, W)
+        row_in = x.view(B * self.input_h, self.in_channels, self.input_w)
+        row_feat = self.conv_row(row_in)                   # (B*H, row_ch, W)
+        row_feat = self.act(row_feat)
+        row_pooled = self.pool(row_feat).squeeze(-1)       # (B*H, row_ch)
+        row_pooled = row_pooled.view(B, self.input_h * row_pooled.shape[1])  # (B, H*row_ch)
+
+        # Column-wise conv: treat each column as a sequence of length H
+        col_in = x.permute(0, 1, 3, 2).contiguous()        # (B, C, W, H)
+        col_in = col_in.view(B * self.input_w, self.in_channels, self.input_h)
+        col_feat = self.conv_col(col_in)                   # (B*W, col_ch, H)
+        col_feat = self.act(col_feat)
+        col_pooled = self.pool(col_feat).squeeze(-1)       # (B*W, col_ch)
+        col_pooled = col_pooled.view(B, self.input_w * col_pooled.shape[1])  # (B, W*col_ch)
+
+        # concatenate row and column descriptors
+        combined = torch.cat([row_pooled, col_pooled], dim=1)  # (B, combined_dim)
+        z = self.to_params(combined)
+        z = torch.tanh(z)
+        return z
+
+    def decode(self, z):
+        B = z.shape[0]
+        # Map latent back to concatenated descriptors
+        recon_combined = self.from_params(z)  # (B, combined_dim)
+
+        # Split into row and column descriptor flats
+        row_flat = recon_combined[:, : (self.input_h * self.base_channels)]
+        col_flat = recon_combined[:, (self.input_h * self.base_channels):]
+
+        # Row path: (B, H*base_ch) -> (B*H, base_ch) -> expand -> (B*H, base_ch, W)
+        # use reshape to avoid non-contiguous .view() errors
+        row_pooled = row_flat.reshape(B * self.input_h, self.base_channels)
+        row_seq = self.row_expand(row_pooled)                       # (B*H, base_ch * W)
+        row_seq = row_seq.view(B * self.input_h, self.base_channels, self.input_w)  # (B*H, base_ch, W)
+        row_seq = self.conv_row_refine(row_seq)                     # refine
+        row_seq = self.act(row_seq)
+        row_pixels = self.to_pixel_row(row_seq)                     # (B*H, in_ch, W)
+        # collapse channel dim (in_ch expected = 1)
+        row_pixels = row_pixels.view(B, self.input_h, self.in_channels, self.input_w)  # (B, H, C, W)
+        # bring to (B, C, H, W)
+        row_image = row_pixels.permute(0, 2, 1, 3).contiguous().view(B, self.in_channels, self.input_h, self.input_w)
+
+        # Column path: (B, W*base_ch) -> (B*W, base_ch) -> expand -> (B*W, base_ch, H)
+        col_pooled = col_flat.reshape(B * self.input_w, self.base_channels)
+        col_seq = self.col_expand(col_pooled)                       # (B*W, base_ch * H)
+        col_seq = col_seq.view(B * self.input_w, self.base_channels, self.input_h)   # (B*W, base_ch, H)
+        col_seq = self.conv_col_refine(col_seq)
+        col_seq = self.act(col_seq)
+        col_pixels = self.to_pixel_col(col_seq)                     # (B*W, in_ch, H)
+        col_pixels = col_pixels.view(B, self.input_w, self.in_channels, self.input_h)  # (B, W, C, H)
+        # permute to (B, C, H, W)
+        col_image = col_pixels.permute(0, 2, 3, 1).contiguous()     # (B, C, H, W)
+
+        # Combine row and column reconstructions (simple average)
+        recon = 0.5 * (row_image + col_image)
+        recon = self.final_act(recon)
+        return recon
+
+    def forward(self, x, y: Optional[torch.Tensor] = None, compute_loss: bool = True):
+        if x.dim() == 2:
+            x = x.view(-1, self.in_channels, self.input_h, self.input_w)
+        # encode / decode
+        z = self.encode(x)
+        if self.ifdecode:
+            recon_x = self.decode(z)
+        else:
+            recon_x = torch.zeros_like(x)  # set to zero tensor of same shape as x
+
+        if not compute_loss:
+            return AutoEncoderOutput(z=z, x_recon=recon_x, loss=None, loss_recon=None, latent_loss=None)
+
+        if self.ifdecode:
+            loss_recon = F.mse_loss(recon_x, x, reduction='mean') * self.mag_recon_loss
+        else:
+            loss_recon = torch.tensor(0.0, device=x.device)
+        target_J = y.to(z.dtype).to(z.device)
+        loss_latent = F.mse_loss(z, target_J, reduction='sum')
+        loss = loss_recon + loss_latent
+
+        return AutoEncoderOutput(z=z, x_recon=recon_x, loss=loss, loss_recon=loss_recon, latent_loss=loss_latent)
+
+
+class ResNetEncoder(nn.Module):
+    """
+    ResNet-based Autoencoder (supervised latent).
+    Uses a ResNet backbone as encoder (up to final conv block) and a mirrored
+    ConvTranspose decoder. Latent space is constrained with Tanh to [-1,1].
+    Args:
+        D_K, D_E: input height and width
+        in_channels: input channels (usually 1)
+        latent_dim: size of latent (should be 3 for J1,J2,J3)
+        pretrained: whether to use pretrained ResNet weights for encoder
+        mag_recon_loss: multiplier for reconstruction loss
+    """
+    def __init__(self, D_K, D_E, in_channels=1, latent_dim=3,
+                 pre_fc_out_channels: Optional[int]=None):
+        super(ResNetEncoder, self).__init__()
+        self.input_h = D_K
+        self.input_w = D_E
+        self.in_channels = in_channels
+        self.latent_dim = latent_dim
+        self.pre_fc_out_channels = pre_fc_out_channels
+
+        if pre_fc_out_channels is not None:
+            in_flat = in_channels * D_K * D_E
+            out_flat = pre_fc_out_channels * 28*28 #D_K * D_E
+            self.pre_fc = nn.Sequential(
+                nn.Flatten(),
+                nn.Linear(in_flat, out_flat),
+                nn.ReLU(),
+                nn.Unflatten(1, (pre_fc_out_channels, 28, 28)),
+            )
+            conv_in_channels = pre_fc_out_channels
+        else:
+            conv_in_channels = in_channels
+        
+        # Load resnet18 and keep layers up to layer4 (exclude avgpool and fc)
+        resnet = models.resnet18(weights=None)
+        # adapt first conv if in_channels != 3
+        if in_channels != 3:
+            # replace conv1 to accept in_channels
+            orig = resnet.conv1
+            resnet.conv1 = nn.Conv2d(conv_in_channels, orig.out_channels,
+                                     kernel_size=orig.kernel_size,
+                                     stride=orig.stride, # 2
+                                     padding=orig.padding,
+                                     bias=orig.bias is not None)
+
+        # encoder backbone: conv1, bn1, relu, maxpool, layer1..layer4
+        self.encoder_backbone = nn.Sequential(
+            resnet.conv1, # (B, 1,100,300) -> (B, 64, 50,150)
+            resnet.bn1, # (B, 64, 50,150)
+            resnet.relu, # (B, 64, 50,150)
+            resnet.maxpool, # (B, 64, 25,75)
+            resnet.layer1, # (B, 64, 25,75)
+            resnet.layer2, # (B, 128, 13,38)
+            resnet.layer3, # (B, 256, 7,19)
+            resnet.layer4, # (B, 512, 4,10)
+        )
+
+        # run a dummy input to determine feature map shape
+        with torch.no_grad():
+            if self.pre_fc_out_channels is not None:
+                dummy = torch.zeros(1, self.pre_fc_out_channels, 28, 28)
+            else:
+                dummy = torch.zeros(1, in_channels, D_K, D_E)
+            self.encoder_backbone.eval()
+            feat = self.encoder_backbone(dummy)
+            self.feature_c = feat.shape[1]
+            self.feature_h = feat.shape[2]
+            self.feature_w = feat.shape[3]
+            self.flat_dim = self.feature_c * self.feature_h * self.feature_w
+
+        # bottleneck
+        self.to_params = nn.Linear(self.flat_dim, latent_dim)
+
+    def encode(self, x):
+        if x.dim() == 2:
+            x = x.view(-1, self.in_channels, self.input_h, self.input_w)
+        if self.pre_fc_out_channels is not None:
+            x = self.pre_fc(x)
+        features = self.encoder_backbone(x)  # (B, C, H', W')
+        flat = features.view(features.size(0), -1)
+        z = self.to_params(flat)
+        z = torch.tanh(z)
+        return z
+
+    def forward(self, x, y: Optional[torch.Tensor] = None, compute_loss: bool = True):
+        # require supervised latent y (consistent with other classes)
+        if y is None:
+            raise ValueError("y (target J parameters) must be provided to forward().")
+        # prepare input
+        if x.dim() == 2:
+            x_in = x.view(-1, self.in_channels, self.input_h, self.input_w)
+        else:
+            x_in = x
+        z = self.encode(x_in)
+        if not compute_loss:
+            return AutoEncoderOutput(z=z, x_recon=None, loss=None, loss_recon=None, latent_loss=None)
+
+        target_J = y.to(z.dtype).to(z.device)
+        loss_latent = F.mse_loss(z, target_J, reduction='sum')
+        loss = loss_latent
+        loss_recon = torch.tensor(0.0, device=x.device)
+
+        return AutoEncoderOutput(z=z, x_recon=None, loss=loss, loss_recon=loss_recon, latent_loss=loss_latent)

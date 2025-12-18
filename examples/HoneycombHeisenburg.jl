@@ -16,7 +16,7 @@ sys = System(cryst, [1 => Moment(s=1/2, g=2)], :dipole; dims=(1,1,1))
 view_crystal(sys, ndims=2,refbonds=10)
 
 # Exchange couplings (meV)
-J1, J2, J3 = 1.0, 0.5, 0.2
+J1, J2, J3 = 1,0.5, 0.2 #1.0, 0.5, 0.2
 
 # Nearest-neighbor J1: A<->B bonds (three per site).
 # Using unit-cell translation vectors in fractional lattice coordinates.
@@ -75,4 +75,47 @@ fig = Figure()
 ax1 = Axis(fig[1,1]; xlabel="Q point index", ylabel="Intensity")
 scatter!(ax1, 1:length(res.data[1,:]), res.data[1,:])
 scatter!(ax1, 1:length(res.data[1,:]), res.data[2,:])
+fig
+
+
+
+function create_heatmap(disp_mat::Matrix{Float64}, data_mat::Matrix{Float64};
+                        Egrid = range(0.0, 10.0; length=300),
+                        sigma = 0.2,
+                        normalize = false)
+    Nbands, Nq = size(disp_mat)
+    img = zeros(Float64, Nq, length(Egrid))  # rows = k point, cols = energy
+
+    # accumulate Gaussians
+    for j in 1:Nq
+        for b in 1:Nbands
+            E0 = disp_mat[b,j]
+            A  = data_mat[b,j]
+            img[j, :] .+= A .* exp.(-0.5 .* ((Egrid .- E0) ./ sigma).^2)
+        end
+    end
+
+    # optional normalization (global)
+    if normalize
+        img .-= minimum(img)
+        s = maximum(img)
+        if s > 0
+            img ./= s
+        end
+    end
+
+    return Egrid, img
+end
+
+
+# example: create and save heatmaps for each row in results
+Egrid, img = create_heatmap(res.disp, res.data;
+                                Egrid = range(0.0, maximum(res.disp) + 1.0; length=400),
+                                sigma = 0.15)
+
+fig = Figure()
+ax = Axis(fig[1,1]; xlabel = "k (path index)", ylabel = "Energy (meV)")
+    # heatmap expects (ys, xs) dimensions -> img is (E x k)
+heatmap!(ax, 1:size(img,2),Egrid, img; colormap = :viridis)
+#Colorbar(fig[1,2], ax.plots[1]; label = "Intensity")
 fig

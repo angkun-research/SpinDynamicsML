@@ -58,65 +58,67 @@ def main():
     X_rec_norm = np.vstack(recons)
     X_rec = X_rec_norm * X_std + X_mean
 
-    # plot 20 random paired points in the same 3D axes
-    n_show = min(20, y.shape[0])
+    # # plot 20 random paired points in the same 3D axes
+    # n_show = min(20, y.shape[0])
+    # rng = np.random.default_rng(42)
+    # idx = rng.choice(y.shape[0], size=n_show, replace=False)
+    # y_s = y[idx]
+    # z_s = Z[idx]
+
+    # fig = plt.figure(figsize=(7, 7))
+    # ax = fig.add_subplot(111, projection='3d')
+
+    # # true J: circles, latent z: triangles
+    # ax.scatter(y_s[:, 0], y_s[:, 1], y_s[:, 2],
+    #            c='C1', s=80, label='true J (o)', marker='o', depthshade=True)
+    # ax.scatter(z_s[:, 0], z_s[:, 1], z_s[:, 2],
+    #            c='C0', s=80, label='latent z (^)', marker='^', depthshade=True)
+
+    # # connect each true J to its corresponding latent point
+    # for i in range(n_show):
+    #     ax.plot([y_s[i, 0], z_s[i, 0]],
+    #             [y_s[i, 1], z_s[i, 1]],
+    #             [y_s[i, 2], z_s[i, 2]],
+    #             c='gray', alpha=0.6, linewidth=0.8)
+
+    # ax.set_title(f'{n_show} random paired points: true J (o) vs latent z (^)')
+    # ax.set_xlabel('J1 / z1'); ax.set_ylabel('J2 / z2'); ax.set_zlabel('J3 / z3')
+    # try:
+    #     ax.set_box_aspect([1, 1, 1])
+    # except Exception:
+    #     pass
+    # ax.legend()
+    # plt.tight_layout()
+
+    # plt.savefig(OUT_PATH, dpi=1000)
+    # print(f'Figure saved to {OUT_PATH}')
+    # plt.show()
+
+    # choose 3 random samples to visualize (deterministic)
     rng = np.random.default_rng(42)
-    idx = rng.choice(y.shape[0], size=n_show, replace=False)
-    y_s = y[idx]
-    z_s = Z[idx]
+    n_recon = 3
+    idx_recon = rng.choice(X_raw.shape[0], size=n_recon, replace=False)
+    colors = ['C0', 'C1', 'C2']
 
-    fig = plt.figure(figsize=(7, 7))
-    ax = fig.add_subplot(111, projection='3d')
-
-    # true J: circles, latent z: triangles
-    ax.scatter(y_s[:, 0], y_s[:, 1], y_s[:, 2],
-               c='C1', s=80, label='true J (o)', marker='o', depthshade=True)
-    ax.scatter(z_s[:, 0], z_s[:, 1], z_s[:, 2],
-               c='C0', s=80, label='latent z (^)', marker='^', depthshade=True)
-
-    # connect each true J to its corresponding latent point
-    for i in range(n_show):
-        ax.plot([y_s[i, 0], z_s[i, 0]],
-                [y_s[i, 1], z_s[i, 1]],
-                [y_s[i, 2], z_s[i, 2]],
-                c='gray', alpha=0.6, linewidth=0.8)
-
-    ax.set_title(f'{n_show} random paired points: true J (o) vs latent z (^)')
-    ax.set_xlabel('J1 / z1'); ax.set_ylabel('J2 / z2'); ax.set_zlabel('J3 / z3')
-    try:
-        ax.set_box_aspect([1, 1, 1])
-    except Exception:
-        pass
-    ax.legend()
+    # plot all 6 curves on the same axes (original = solid, recon = dashed)
+    plt.figure(figsize=(10, 5))
+    x_axis = np.arange(X_raw.shape[1])
+    for i, idx in enumerate(idx_recon):
+        orig = X_raw[idx]
+        recon = X_rec[idx]
+        c = colors[i % len(colors)]
+        plt.plot(x_axis[200::2], orig[200::2], label=f'orig idx {idx}', color=c, linestyle='-')
+        plt.plot(x_axis[200::2], recon[200::2], label=f'recon idx {idx}', color=c, linestyle='--')
+        plt.plot(x_axis[201::2], orig[201::2], label=None, color=c, linestyle='-')
+        plt.plot(x_axis[201::2], recon[201::2], label=None, color=c, linestyle='--')
+    plt.xlabel('feature index')
+    plt.ylabel('value')
+    plt.title('Original (solid) and reconstructed (dashed) curves — 3 samples')
+    plt.legend(loc='upper left', fontsize='small', ncol=2)
     plt.tight_layout()
-
     plt.savefig(OUT_PATH, dpi=1000)
     print(f'Figure saved to {OUT_PATH}')
     plt.show()
-
-    # choose 3 random samples to visualize (deterministic)
-    # rng = np.random.default_rng(42)
-    # n_recon = 3
-    # idx_recon = rng.choice(X_raw.shape[0], size=n_recon, replace=False)
-    # colors = ['C0', 'C1', 'C2']
-
-    # # plot all 6 curves on the same axes (original = solid, recon = dashed)
-    # plt.figure(figsize=(10, 5))
-    # x_axis = np.arange(X_raw.shape[1])
-    # for i, idx in enumerate(idx_recon):
-    #     orig = X_raw[idx]
-    #     recon = X_rec[idx]
-    #     c = colors[i % len(colors)]
-    #     plt.plot(x_axis[200:], orig[200:], label=f'orig idx {idx}', color=c, linestyle='-')
-    #     plt.plot(x_axis[200:], recon[200:], label=f'recon idx {idx}', color=c, linestyle='--')
-    # plt.xlabel('feature index')
-    # plt.ylabel('value')
-    # plt.title('Original (solid) and reconstructed (dashed) curves — 3 samples')
-    # plt.legend(loc='upper left', fontsize='small', ncol=2)
-    # plt.tight_layout()
-    # #plt.savefig(OUT_PATH, dpi=1000)
-    # #print(f'Figure saved to {OUT_PATH}')
-    # plt.show()
 
 if __name__ == '__main__':
     main()
