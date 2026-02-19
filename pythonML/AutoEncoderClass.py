@@ -27,6 +27,7 @@ class AutoEncoderOutput:
     loss: Optional[torch.Tensor] = None
     loss_recon: Optional[torch.Tensor] = None
     latent_loss: Optional[torch.Tensor] = None
+    relative_loss: Optional[torch.Tensor] = None
 
 class FCautoencoder(nn.Module):
     """
@@ -36,11 +37,12 @@ class FCautoencoder(nn.Module):
         hidden_dim (int): dimension of hidden layers
         latent_dim (int): dimension of latent space (should be 3 for J1,J2,J3)
     """
-    def __init__(self,input_dim, hidden_dim=1024,latent_dim=3,mag_recon_loss=1.0, ifdecode=False):
+    def __init__(self,input_dim, hidden_dim=1024,latent_dim=3,mag_recon_loss=1.0, ifdecode=False, relative_loss=False):
         super(FCautoencoder, self).__init__()
         self.latent_dim = latent_dim
         self.mag_recon_loss = mag_recon_loss
         self.ifdecode = ifdecode
+        self.relative_loss = relative_loss
         self.encoder = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.SiLU(), # Swish activation function
@@ -75,6 +77,7 @@ class FCautoencoder(nn.Module):
         """
         z = self.encoder(x)
         z = nn.Tanh()(z)  # constrain latent space to [-1,1]
+        #z = torch.tanh(z ** 3)
         return z
 
     def decode(self, z):
@@ -124,7 +127,13 @@ class FCautoencoder(nn.Module):
         #loss_recon = F.mse_loss(recon_x, x, reduction='sum') 
         # supervised latent loss: compare z to provided true J parameters if available,
         target_J = y.to(z.dtype).to(z.device)
-        loss_latent = F.mse_loss(z, target_J, reduction='sum')
+        tsl = F.mse_loss(z, target_J, reduction='sum')
+        rel_err = ((z - target_J)**2) / ((target_J.abs())**2)
+        rel_err = rel_err.sum()
+        if self.relative_loss:
+            loss_latent = rel_err
+        else:
+            loss_latent = tsl
 
         loss = loss_recon + loss_latent
 
@@ -134,6 +143,7 @@ class FCautoencoder(nn.Module):
             loss = loss,
             loss_recon = loss_recon,
             latent_loss = loss_latent,
+            relative_loss = rel_err,
         )
 
 
@@ -172,6 +182,9 @@ def train(model, dataloader, optimizer, prev_updates, writer=None,device='cpu'):
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
     print(f'====> Train set loss: {loss.item():.4f}, Recon Loss: {output.loss_recon.item():.4f}, Latent Loss: {output.latent_loss.item():.4f}')
+    # if has loss.relative_loss, print it
+    if hasattr(output, 'relative_loss'):
+        print(f'====> Relative Latent Loss: {output.relative_loss.item():.6f}')
     return prev_updates + len(dataloader)
 
 def test(model, dataloader, cur_step, writer=None,device='cpu'):
@@ -200,6 +213,9 @@ def test(model, dataloader, cur_step, writer=None,device='cpu'):
     test_recon_loss /= len(dataloader)
     test_kl_loss /= len(dataloader)
     print(f'====> Test set loss: {test_loss:.4f}, Recon Loss: {test_recon_loss:.4f}, Latent Loss: {test_kl_loss:.4f}')
+    # if has loss.relative_loss, print it
+    if hasattr(output, 'relative_loss'):
+        print(f'====> Relative Latent Loss: {output.relative_loss.item():.6f}')
     if writer is not None:
         writer.add_scalar('Loss/test', test_loss, global_step=cur_step)
         writer.add_scalar('Loss/test/Recon', test_recon_loss, global_step=cur_step)

@@ -19,6 +19,7 @@ BATCH_SIZE = 100
 LR = 1e-3
 DW = 1e-5
 EPOCHS = 100
+broaden_sigma = 2.0 # 0.2
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 MODEL_OUT = './data'
 #os.makedirs(MODEL_OUT, exist_ok=True)
@@ -47,7 +48,7 @@ for idx, row in df.iterrows():
     if len(flat_disp) != len(flat_data):
         raise ValueError(f"disp/data length mismatch at row {idx}")
     # create_heatmap_from_flat returns (Egrid, img) where img shape = (Nq, len(Egrid))
-    _, img = create_heatmap_from_flat(flat_disp, flat_data, Nbands=Nbands, Nq=Nq, Egrid=Egrid, sigma=0.2, normalize=True)
+    _, img = create_heatmap_from_flat(flat_disp, flat_data, Nbands=Nbands, Nq=Nq, Egrid=Egrid, sigma=broaden_sigma, normalize=True)
     # flatten the 2D heatmap into a 1D feature vector
     images.append(img.ravel())
 
@@ -79,14 +80,14 @@ val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, drop_last=
 input_dim = X.shape[1]
 mag_recon_loss = 100.0 #100.0
 ifdecode = False
-#model = FCautoencoder(input_dim=input_dim, hidden_dim=1024, latent_dim=8, mag_recon_loss=mag_recon_loss,ifdecode=ifdecode).to(DEVICE)
+model = FCautoencoder(input_dim=input_dim, hidden_dim=1024, latent_dim=10, mag_recon_loss=mag_recon_loss,ifdecode=ifdecode).to(DEVICE)
 #model = ConvEncoder(input_dim=input_dim, hidden_dim=1024, latent_dim=3,kernel_size=3, mag_recon_loss=mag_recon_loss).to(DEVICE)
 #model = TransformerEncoder(input_dim=input_dim, hidden_dim=1024, latent_dim=3, mag_recon_loss=mag_recon_loss).to(DEVICE)
 #model = ConvDownSampling(Nq,len(Egrid), base_channels=32,latent_dim=3,kernel_size=3, mag_recon_loss=mag_recon_loss).to(DEVICE)
 #model = SimpleConvAutoencoder(Nq,len(Egrid), base_channels=16,latent_dim=3, mag_recon_loss=mag_recon_loss).to(DEVICE)
 #model = ViTAutoencoder(Nq,len(Egrid),mag_recon_loss=mag_recon_loss).to(DEVICE)
 #model = Conv1DAutoencoder(Nq,len(Egrid),mag_recon_loss=mag_recon_loss, ifdecode=ifdecode).to(DEVICE)
-model = ResNetEncoder(Nq,len(Egrid),latent_dim=10,pre_fc_out_channels=1).to(DEVICE)
+#model = ResNetEncoder(Nq,len(Egrid),latent_dim=10,pre_fc_out_channels=1).to(DEVICE)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=DW)
 # print number of parameters

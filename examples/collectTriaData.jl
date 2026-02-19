@@ -9,7 +9,8 @@ cryst = Crystal(latvecs,[[0,0,0]])
 sys_template = System(cryst,[1 => Moment(s=1/2,g=2)],:dipole;dims=(1,1,1))
 h = 20.0 # need to be large for more parameters J with longer range
 qs = [[0,0,0], [1,0,0], [0,1,0], [1/2,0,0], [0,1,0], [0,0,0]]
-path = q_space_path(cryst, qs, 100)
+Nkpts = 100
+path = q_space_path(cryst, qs, Nkpts)
 
 Jvals = range(-1, 1; length=20)
 # results = DataFrame(J1=Float64[], J2=Float64[], J3=Float64[], data=Vector{Float64}[], disp=Vector{Float64}[], qs=Vector{Vector{Float64}}[])
@@ -50,9 +51,22 @@ bond_vectors[13] = [4,-2,0]
 bond_vectors[14] = [5,-1,0]
 bond_vectors[15] = [6,0,0]
 
+rs = zeros(10)  #d = a \sqrt{n_1^2 + n_1 n_2 + n_2^2}
+rs[1] = 1.0
+rs[2] = sqrt(3)
+rs[3] = 2.0
+rs[4] = sqrt(7)
+rs[5] = 3.0
+rs[6] = sqrt(12)
+rs[7] = sqrt(13)
+rs[8] = 4.0
+rs[9] = sqrt(19)
+rs[10] = sqrt(21)
+
 Jsize = 10
 Js = zeros(Jsize)
-nsample = 10000
+nsample = 1 # 10000 
+
 results = DataFrame(Js=Vector{Float64}[], data=Vector{Float64}[], disp=Vector{Float64}[])
 
 function sample_q_triangular(N::Int)
@@ -73,12 +87,13 @@ function sample_q_triangular(N::Int)
     end
     return qs[1:min(N, length(qs))]
 end
-qs = sample_q_triangular(100)
+qs = sample_q_triangular(Nkpts)
 
 # Randomly sample Js from the Jsize dimensional space with each J in range -1 to 1
 for sample_idx in ProgressBar(1:nsample)
     for j in 1:Jsize
-        Js[j] = rand()*2 - 1 # random value between -1 and
+        #Js[j] = rand()*2 - 1 # random value between -1 and 1
+        Js[j] = 1/rs[j]^2  
     end
     sys = clone_system(sys_template)
     for j in 1:Jsize
@@ -88,8 +103,8 @@ for sample_idx in ProgressBar(1:nsample)
     randomize_spins!(sys)
     minimize_energy!(sys)
     swt = SpinWaveTheory(sys; measure=ssf_perp(sys))
-    #res = intensities_bands(swt, path)
-    res = intensities_bands(swt, qs)
+    res = intensities_bands(swt, path)
+    #res = intensities_bands(swt, qs)
     push!(results, (
         copy(Js),
         vec(res.data),
@@ -97,10 +112,24 @@ for sample_idx in ProgressBar(1:nsample)
     ))
 end
 
+# println(rs)
+# println(Js)
 
-CSV.write("data/triangular_heisenberg_Js10_h20_qsBZ.csv", results)
+#CSV.write("data/triangular_heisenberg_Js10_h20_qsPath400.csv", results)
+#CSV.write("data/triangular_heisenberg_Js10_h20_qsBZ$(Nkpts).csv", results)
+#CSV.write("data/triangular_heisenberg_Js10_h20_qsBZ_single.csv", results)
 
 # # read back the data
 # results = CSV.read("data/triangular_heisenberg_Js10_h20.csv", DataFrame)
 # # extract qs
 # qs = results.qs[1]
+
+# plot the results
+# xs = collect(1:length(results.disp[1]))
+# ys = results.disp[1]
+
+# fig = Figure(; size=(800,400))
+# ax = Axis(fig[1,1], xlabel="q", ylabel="Energy (meV)", title="Dispersion")
+# #lines!(ax, xs, ys)
+# scatter!(ax, xs, ys, marker=:circle)
+# fig |> display
