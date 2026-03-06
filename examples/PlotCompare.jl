@@ -45,23 +45,30 @@ rs[8] = 4.0
 rs[9] = sqrt(19)
 rs[10] = sqrt(21)
 
-Jsize = 10
+Jsize = 5 #10
 nsample = 2 # 10000 
 Js = zeros(Jsize, nsample)
 res = zeros(length(path.qs), nsample)
 
-Js[:, 1] = 1 ./ rs.^2
-#Js[:, 2] = [0.97279334,0.3355829,0.2550886, 0.12769656, 0.13329244, 0.06266326,
-#  0.04556783, 0.07966978, 0.05412785, 0.04124609]
-Js[:, 2] = [0.9722343,0.33919275,0.25549358, 0.13345772, 0.09969644, 0.05931171,
-  0.04195142, 0.03636602, 0.03026602, 0.02043957]
+# Js[:, 1] = 1 ./ rs.^2
+# #Js[:, 2] = [0.97279334,0.3355829,0.2550886, 0.12769656, 0.13329244, 0.06266326,
+# #  0.04556783, 0.07966978, 0.05412785, 0.04124609]
+# Js[:, 2] = [0.9722343,0.33919275,0.25549358, 0.13345772, 0.09969644, 0.05931171,
+#   0.04195142, 0.03636602, 0.03026602, 0.02043957]
+
+# Js[:, 1] = [0.0672606,0.81141645,-0.66225547,-0.26658773,-0.61779296]
+# Js[:, 2] = [0.05755597,0.81726307,-0.6566382,-0.2775978,-0.6139747]
+# Js[:, 1] = [0.14411639, -0.65124303, 0.47193098, 0.24249503, 0.9384516]
+# Js[:, 2] = [0.14003862, -0.63205945, 0.46725968, 0.24539933, 0.9399781]
+Js[:, 1] = [-0.3488161,0.6683957,-0.14896345,0.02395559,0.7439383]
+Js[:, 2] = [-0.34946927,0.6603112,-0.15114537,0.01153535,0.7424642]
 
 # Randomly sample Js from the Jsize dimensional space with each J in range -1 to 1
 for sample_idx in 1:nsample
-    for j in 1:Jsize
-        #Js[j] = rand()*2 - 1 # random value between -1 and 1
-        Js[j] = 1/rs[j]^2  
-    end
+    # for j in 1:Jsize
+    #     #Js[j] = rand()*2 - 1 # random value between -1 and 1
+    #     Js[j] = 1/rs[j]^2  
+    # end
     sys = clone_system(sys_template)
     for j in 1:Jsize
         set_exchange!(sys, Js[j,sample_idx], Bond(1,1,bond_vectors[j]))
@@ -77,6 +84,7 @@ end
 
 
 # plot the two curves
-scatter(1:Nkpts, res[:,1], label="J ~ 1/r^2", xlabel="q-point index", ylabel="Energy (meV)", title="Spin Wave Dispersion Comparison", legend=:topright)
-scatter!(1:Nkpts, res[:,2], label="J from AE prediction")
-savefig("~/Desktop/SpinWaveDispersionComparison.pdf")
+scatter(1:Nkpts, res[:,1], label="J true", xlabel="q-point index", ylabel="Energy (meV)", title="Spin Wave Dispersion Comparison", legend=:topright)
+scatter!(1:Nkpts, res[:,2], label="J prediction")
+#savefig("~/Desktop/SpinWaveDispersionComparison.pdf")
+#savefig("~/Desktop/fig3.pdf")

@@ -48,7 +48,7 @@ function adaptive_knots(ω, S; N=10)
 end
 
 # The lower bound and upper bound of energy range (in meV)
-energy_min, energy_max = 0.0, 30.0
+energy_min, energy_max = 0.0, 50.0
 energy_step = 0.01
 energies = collect(energy_min:energy_step:energy_max)
 # The Lorentzian broadening factor (in meV) FWHM=2η
@@ -57,7 +57,7 @@ energies = collect(energy_min:energy_step:energy_max)
 num_tasks = 250
 #results = DataFrame(Js=Vector{Float64}[], data=Vector{Float64}[], disp=Vector{Float64}[])
 # Store rows in a thread-safe way (no shared mutation inside threads)
-const RowT = NamedTuple{(:Js, :data, :disp), Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}}
+const RowT = NamedTuple{(:Js, :data, :disp, :B), Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}, Float64}}
 rows = RowT[]
 
 # Randomly sample Js from the Jsize dimensional space with each J in range -1 to 1
@@ -86,13 +86,13 @@ for taskid in ProgressBar(1:num_tasks)
         #     vec(Ss_all),
         # ))
         # DO NOT push! to a shared DataFrame here
-        local_rows[jobid] = (Js = copy(Js), data = vec(Es_all), disp = vec(Ss_all))
+        local_rows[jobid] = (Js = copy(Js), data = vec(Es_all), disp = vec(Ss_all), B = copy(B))
     end
     append!(rows, local_rows)
-    if length(rows) >= 1000
-        break # stop early for testing
-    end
+    # if length(rows) >= 1000
+    #     break # stop early for testing
+    # end
 end
 
 results = DataFrame(rows)
-CSV.write("data/HaoResults/Hao_anisotropy_Js5_Filter20_N1009.csv", results)
+CSV.write("data/HaoResults/Hao_anisotropy_Js5_Filter20.csv", results)

@@ -3,6 +3,13 @@ using Sunny, DataFrames, CSV, JLD2
 #using Plots
 using ProgressBars
 
+# We polarize the system along the x direction to be consistent with KYbSe₂ experiments
+function polarize_system!(sys)
+    for i in CartesianIndices(sys.dipoles)
+        set_dipole!(sys, (-1, 0, 0), i)
+    end
+end
+
 function Run_LSWT(Js,B; dims = (1,1,1))
     J1, Δ, Jpmpm, Jzpm, J2 = Js
     units = Units(:meV, :angstrom)
@@ -27,8 +34,9 @@ function Run_LSWT(Js,B; dims = (1,1,1))
 
     swt = SpinWaveTheory(sys; measure=ssf_perp(sys))
 
-    randomize_spins!(sys)
-    minimize_energy!(sys)
+    # randomize_spins!(sys)
+    # minimize_energy!(sys)
+    polarize_system!(sys)
 
     swt = SpinWaveTheory(sys; measure=ssf_perp(sys))
     res = intensities_bands(swt, path)
@@ -40,8 +48,8 @@ end
 
 Jsize = 5
 num_tasks = 250
-B_same = 20
-results = DataFrame(Js=Vector{Float64}[], data=Vector{Float64}[], disp=Vector{Float64}[])
+#B_same = 20
+results = DataFrame(Js=Vector{Float64}[], data=Vector{Float64}[], disp=Vector{Float64}[], B = Float64[])
 
 # Randomly sample Js from the Jsize dimensional space with each J in range -1 to 1
 for taskid in ProgressBar(1:num_tasks)
@@ -50,12 +58,14 @@ for taskid in ProgressBar(1:num_tasks)
     for jobid in 1:num_jobs
         Js = filetemp["Js_list"][jobid]
         B = filetemp["B_list"][jobid]
-        #res = Run_LSWT(Js, B; dims=(6, 6, 1))
-        res = Run_LSWT(Js, B_same)
+        Js[4] = 0.0
+        res = Run_LSWT(Js, B; dims=(1, 1, 1))
+        #res = Run_LSWT(Js, B_same)
         push!(results, (
-            copy(Js),
+            copy(Js[[1, 2, 3, 5]]), # only keep J1, Δ, J1pmpm, J2
             vec(res.data),
             vec(res.disp),
+            copy(B),
         ))
     end
 end
@@ -63,7 +73,7 @@ end
 # println(rs)
 # println(Js)
 
-CSV.write("data/HaoResults/Hao_anisotropy_Js5_B50.csv", results)
+CSV.write("data/HaoResults/Hao_anisotropy_Js4_Bdep.csv", results)
 
 # # read back the data
 # results = CSV.read("data/triangular_heisenberg_Js10_h20.csv", DataFrame)

@@ -10,11 +10,12 @@ from AutoEncoderClass import FCautoencoder, train, test
 from AutoEncoderClass import ConvEncoder, TransformerEncoder,Conv1DEncoder
 
 # --- Config ---
-#CSV_PATH = './data/triangular_heisenberg_Js10_h20_qsBZ400.csv' #_qsPath400.csv' #qsBZ400.csv' 
+#CSV_PATH = './data/triangular_heisenberg_Js5_h20_qsBZ.csv' #_qsPath400.csv' #qsBZ400.csv' 
 #CSV_PATH = './data/triangular_anisotropy_Js8_h20_qsBZ100.csv'
 #CSV_PATH = './data/triangular_anisotropy_temp.csv'
 #'./data/honeycomb_heisenberg_sweep.csv' #'./data/triangular_heisenberg_sweep.csv'
-CSV_PATH = './data/HaoResults/Hao_anisotropy_Js5_Filter20_N1009.csv' #'./data/HaoResults/Hao_anisotropy_Js5_B50.csv'
+#CSV_PATH = './data/HaoResults/Hao_anisotropy_Js4_Bdep.csv' ##Hao_anisotropy_Js5_Filter20_N1009.csv' #'./data/HaoResults/Hao_anisotropy_Js5_B50.csv'
+CSV_PATH = './data/HaoResults/Hao_anisotropy_Js5_S6tensor_Filter3_N1009.csv'
 BATCH_SIZE = 100
 LR = 1e-3
 DW = 1e-5
@@ -33,8 +34,10 @@ for col in ['data', 'disp', 'Js']:
 
 # Build feature matrix X and target J = [J1,J2,J3]
 X = np.array([row['data'] + row['disp'] for _, row in df.iterrows()], dtype=np.float32)
+#X = np.array([row['data'] + row['disp'] + [float(row["B"])] for _, row in df.iterrows()], dtype=np.float32)
 #y = df[['J1', 'J2', 'J3']].values.astype(np.float32)
 y = np.array(df['Js'].tolist(), dtype=np.float32)
+#y = np.delete(y, 3, axis=1)  # now shape: (N, 4)
 
 # Optional: simple normalization (per-feature)
 X_mean = X.mean(axis=0, keepdims=True)
@@ -87,3 +90,22 @@ for epoch in range(1, EPOCHS + 1):
 # }, os.path.join(MODEL_OUT, f"FCAE_HC_Js{NumOfJ}_epoch{EPOCHS}_tanhx3.pth"))
 
 # print("Training finished. Models saved to:", MODEL_OUT)
+
+
+
+# ---- Print a single test example: true Js vs predicted Js ----
+model.eval()
+idx = 0  # change this to inspect a different validation example
+
+x_one, j_true = val_ds[:3]  # val_ds is a Subset; returns (X, Js)
+x_one = x_one.unsqueeze(0).to(DEVICE)  # add batch dim: (1, input_dim)
+
+with torch.no_grad():
+    out = model.encode(x_one)
+
+j_pred = out.squeeze(0).detach().cpu().numpy()
+j_true_np = j_true.detach().cpu().numpy()
+
+print("Single validation sample")
+print("J_true:", j_true_np)
+print("J_pred:", j_pred)

@@ -68,16 +68,72 @@ function map_lanczos_results_to_neutron_intensities(qs_path, as_path, bs_path, n
     return intensities
 end
 
+function map_lanczos_results_to_dssf_tensor(qs_path, as_path, bs_path, norm2s_path, ωs, η)
+    ret_buff = zeros(length(ωs), 6)
+    num_obs = 3
+    niters = size(as_path, 2)
+    dssf = zeros(6, length(qs_path), length(ωs))
+
+    # The original crystal
+    a = 4.1149
+    c = 22.6911
+    latvecs = lattice_vectors(a, a, c, 90, 90, 120)
+    positions = [[0, 0, 0]]
+    cryst = Crystal(latvecs, positions, 162)
+
+    for iq in eachindex(qs_path)
+        ret_buff .= 0.0
+        as = view(as_path, iq, :, :)
+        bs = view(bs_path, iq, :, :)
+        norm2s = view(norm2s_path, iq, :)
+
+        for i in 1:num_obs
+            as_i = view(as, :, i)
+            bs_i = view(bs, :, i)
+            for (iω, ω) in enumerate(ωs)
+                z = ω + 1im*η
+                G = z - as_i[niters]
+                for j in niters-1:-1:1
+                    A = bs_i[j]^2 / G
+                    G = z - as_i[j] - A
+                end
+                G = inv(G) * norm2s[i]
+                ret_buff[iω, i] = - imag(G) / π
+            end
+            dssf[i, iq, :] = ret_buff[:, i]
+            # Off-diagonal elements:
+            # (x+y)^2, (y+z)^2, (z+x)^2 correlations
+            as_i_plus = view(as, :, i+3)
+            bs_i_plus = view(bs, :, i+3)
+            for (iω, ω) in enumerate(ωs)
+                z = ω + 1im*η
+                G = z - as_i_plus[niters]
+                for j in niters-1:-1:1
+                    A = bs_i_plus[j]^2 / G
+                    G = z - as_i_plus[j] - A
+                end
+                G = inv(G) * norm2s[i+3]
+                ret_buff[iω, i+3] = - imag(G) / π
+            end
+            # Here we store xy+yx, yz+zy, zx+xz correlations
+            dssf[i+3, iq, :] = ret_buff[:, i+3] - ret_buff[:, i] - ret_buff[:, mod1(i+1, 3)]
+        end
+    end
+
+    return dssf
+end
+
 # We polarize the system along the x direction to be consistent with KYbSe₂ experiments
-function polarize_system!(sys)
+function polarize_system!(sys, dir)
     for i in CartesianIndices(sys.dipoles)
-        set_dipole!(sys, (-1, 0, 0), i)
+        set_dipole!(sys, dir, i)
     end
 end
 
 # Use bisection to search for the saturation field B_sat for given exchange parameters. Here we use the classical energy as a criterion for detecting the saturation field.
-function determine_B_sat(Js; B_diff_tol=1e-2, energy_tol=1e-8, max_iters=100)
+function determine_B_sat(Js, dir; B_diff_tol=1e-2, energy_tol=1e-8, max_iters=100)
     J1, Δ, Jpmpm, Jzpm, J2 = Js
+    normalize!(dir)
     units = Units(:meV, :angstrom)
     a = 4.1149
     c = 22.6911
@@ -100,8 +156,8 @@ function determine_B_sat(Js; B_diff_tol=1e-2, energy_tol=1e-8, max_iters=100)
     iter = 0
     while B_max - B_min > B_diff_tol && iter < max_iters
         iter += 1
-        set_field!(sys, [B_sat, 0, 0] * units.T)
-        polarize_system!(sys)
+        set_field!(sys, B_sat * units.T * dir)
+        polarize_system!(sys, -dir)
         e_ref = energy_per_site(sys)
         randomize_spins!(sys)
         minimize_energy!(sys)
@@ -115,7 +171,7 @@ function determine_B_sat(Js; B_diff_tol=1e-2, energy_tol=1e-8, max_iters=100)
     end
 
     sys_min = reshape_supercell(sys, diagm(ones(3)))
-    polarize_system!(sys_min)
+    polarize_system!(sys_min, -dir)
 
     return B_sat, sys_min
 end
@@ -132,17 +188,18 @@ On the nearest-neighbor bond, the 3×3 exchange tensor is given by:
 
 On the next-nearest-neighbor bond, the exchange is isotropic with strength J2.
 """
-function triangular_nlswt_lanczos_calculations(Js, clustersize)
+function triangular_nlswt_lanczos_calculations(Js, clustersize, dir; B=nothing, opts...)
     units = Units(:meV, :angstrom)
-    B_sat, sys_min = determine_B_sat(Js)
-    # Randomly select field between 1.1 and 1.2 times the saturation field
-    # For a ferromagnetic dominant system, the saturation field can be very small, so we set a lower bound of 5 T for the selected field to avoid numerical issues in the subsequent NLSWT calculations.
-    if B_sat < 1e-1
-        B = B_sat + 5.0
-    else
-        B = (1.1 + 0.1*rand()) * B_sat
-    end
-    set_field!(sys_min, [B, 0, 0] * units.T)
+
+    B_sat, sys_min = determine_B_sat(Js, dir; opts...)
+    @show B_sat
+    # If B is not provided, pick a value between 1.1 and 1.2 times the saturation field.
+    B = isnothing(B) ? (1.1 + 0.1 * rand()) * B_sat : B
+
+    # Avoid extremely small fields.
+    B = B < 1e-1 ? B + 5.0 : B
+
+    set_field!(sys_min, B * units.T * dir)
 
     swt = SpinWaveTheory(sys_min; measure=ssf_perp(sys_min))
     try
