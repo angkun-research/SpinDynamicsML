@@ -10,18 +10,22 @@ from AutoEncoderClass import FCautoencoder
 
 def load_csv_features(csv_path):
     df = pd.read_csv(csv_path)
-    for col in ['data', 'disp']:
+    for col in ['data', 'disp', 'Js']:
         df[col] = df[col].apply(json.loads)
-    X = np.array([row['data'] + row['disp'] for _, row in df.iterrows()], dtype=np.float32)
-    y = df[['J1', 'J2', 'J3']].values.astype(np.float32)
+    X = np.array([row['disp'] for _, row in df.iterrows()], dtype=np.float32)
+    #X = np.array([row['data'] + row['disp'] for _, row in df.iterrows()], dtype=np.float32)
+    #y = df[['J1', 'J2', 'J3']].values.astype(np.float32)
+    y = np.array(df['Js'].tolist(), dtype=np.float32)
     return X, y
 
 def main():
     # Configuration (edit these instead of using command-line args)
-    CSV_PATH = './data/honeycomb_heisenberg_sweep.csv'#'./data/triangular_heisenberg_sweep.csv'
-    CKPT_PATH = './data/FCAE_HC_epoch100.pth' #'./data/autoencoder_epoch100.pth'   # change to your checkpoint
+    #CSV_PATH = './data/triangular_heisenberg_Js3_h20.csv'#'./data/triangular_heisenberg_sweep.csv'
+    CSV_PATH = './data/HaoResults/Hao_anisotropy_Js4_Bdep.csv'
+    CKPT_PATH = './data/FCAE_anistropy_LSWT_Js4_epoch100.pth' #'./data/autoencoder_epoch100.pth'   # change to your checkpoint
     OUT_PATH = '../Desktop/fig1.png'
     DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+    NumOfJ = 4
 
     X_raw, y = load_csv_features(CSV_PATH)
     X = X_raw.copy()
@@ -37,7 +41,7 @@ def main():
 
     # build model and load weights
     input_dim = X.shape[1]
-    model = FCautoencoder(input_dim=input_dim, hidden_dim=1024, latent_dim=3).to(device)
+    model = FCautoencoder(input_dim=input_dim, hidden_dim=1024, latent_dim=NumOfJ).to(device)
     model.load_state_dict(ckpt['model_state'])
     model.eval()
 
@@ -107,10 +111,11 @@ def main():
         orig = X_raw[idx]
         recon = X_rec[idx]
         c = colors[i % len(colors)]
-        plt.plot(x_axis[200::2], orig[200::2], label=f'orig idx {idx}', color=c, linestyle='-')
-        plt.plot(x_axis[200::2], recon[200::2], label=f'recon idx {idx}', color=c, linestyle='--')
-        plt.plot(x_axis[201::2], orig[201::2], label=None, color=c, linestyle='-')
-        plt.plot(x_axis[201::2], recon[201::2], label=None, color=c, linestyle='--')
+        # plt.plot(x_axis[200::2], orig[200::2], label=f'orig idx {idx}', color=c, linestyle='-')
+        # plt.plot(x_axis[200::2], recon[200::2], label=f'recon idx {idx}', color=c, linestyle='--')
+        # plt.plot(x_axis[201::2], orig[201::2], label=None, color=c, linestyle='-')
+        # plt.plot(x_axis[201::2], recon[201::2], label=None, color=c, linestyle='--')
+        plt.plot(x_axis, orig, label=f'orig idx {idx}', color=c, linestyle='-')
     plt.xlabel('feature index')
     plt.ylabel('value')
     plt.title('Original (solid) and reconstructed (dashed) curves — 3 samples')

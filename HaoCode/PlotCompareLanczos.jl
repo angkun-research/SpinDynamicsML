@@ -20,8 +20,13 @@ Js = zeros(5, nsample)
 # Js[:, 2] = [0.28811148, 0.727085, -0.04912354, -0.44243002, 0.12818626]
 # Js[:, 1] = [0.54158115, 0.62906706, -0.72885025, 0.9616471, 0.57017493]
 # Js[:, 2] = [0.674732, 0.6464902, -0.80049103, 0.8315382, 0.58519995]
-Js[:,1] = [-0.62963295, 0.8469429, -0.20859149, -0.69922495, 0.85480577]
-Js[:,2] = [-0.70979524, 0.7278443, -0.21127568, -0.7666664, 0.9204104]
+# Js[:,1] = [-0.62963295, 0.8469429, -0.20859149, -0.69922495, 0.85480577]
+# Js[:,2] = [-0.70979524, 0.7278443, -0.21127568, -0.7666664, 0.9204104]
+
+# Js[:,1] = [0.21400326, 0.7771115, 0.5002325, -0.31930724, 0.8521418]
+# Js[:,2] = [0.23267163, 0.53185964, 0.4400487, -0.33313343, 0.84743136]
+Js[:,1] = [-0.22182386, 0.9545119, -0.88626814, -0.24695198, -0.8764502]
+Js[:,2] = [-0.4369124, 0.6825587, -0.82195246, -0.21397357, -0.8218367]
 
 # Js = [2rand()-1, rand(), 0, 0, 2rand()-1]
 clustersize = (11, 11, 1)
@@ -32,11 +37,12 @@ energies = collect(energy_min:energy_step:energy_max)
 dir = [1.0, 0.0, 0.0]
 
 res = zeros(12, length(energies), nsample)
-
+Bs = zeros(nsample)
 for sample_idx in 1:nsample
     B, qs_path, as_path, bs_path, norm2s_path = triangular_nlswt_lanczos_calculations(Js[:, sample_idx], clustersize,dir)
     intensity_temp = map_lanczos_results_to_neutron_intensities(qs_path, as_path, bs_path, norm2s_path, energies, η)
     res[:, :, sample_idx] = intensity_temp
+    Bs[sample_idx] = B
     println("Sample $sample_idx completed.")
 end
 
@@ -49,12 +55,12 @@ with_theme(theme_latexfonts()) do
     ax  = Axis(fig[1,1]; xlabel=L"(H,H,0)", ylabel="Energy (meV)", title="True value", xlabelsize=30, ylabelsize=30, titlesize=30, xticklabelsize=25, yticklabelsize=25)
     heatmap!(ax, hs, energies, res[:,:,1]; colormap=:viridis, colorrange=(0, 2.5))
     text!(ax, 0.05, 15, text="J1, Δ, J1pmpm, J1zpm, J2 = $(round.(Js[:,1], digits=3))", align = (:left, :top), fontsize=16, color=:white)
-    text!(ax, 0.05, 13, text="B = $(round(B, digits=3)) T", align = (:left, :top), fontsize=16, color=:white)
+    text!(ax, 0.05, 13, text="B = $(round(Bs[1], digits=3)) T", align = (:left, :top), fontsize=16, color=:white)
     ylims!(ax, 0, 20)
     ax  = Axis(fig[1,2]; xlabel=L"(H,H,0)", ylabel="Energy (meV)", title="Predicted value", xlabelsize=30, ylabelsize=30, titlesize=30, xticklabelsize=25, yticklabelsize=25)
     heatmap!(ax, hs, energies, res[:,:,2]; colormap=:viridis, colorrange=(0, 2.5))
     text!(ax, 0.05, 15, text="J1, Δ, J1pmpm, J1zpm, J2 = $(round.(Js[:,2], digits=3))", align = (:left, :top), fontsize=16, color=:white)
-    text!(ax, 0.05, 13, text="B = $(round(B, digits=3)) T", align = (:left, :top), fontsize=16, color=:white)
+    text!(ax, 0.05, 13, text="B = $(round(Bs[2], digits=3)) T", align = (:left, :top), fontsize=16, color=:white)
     ylims!(ax, 0, 20)
     fig
     save("../Desktop/fig1.pdf", fig) # save figure
@@ -70,5 +76,5 @@ with_theme(theme_latexfonts()) do
     axislegend(ax2; labelsize=18)
     xlims!(ax2, 0, 20)
     fig
-    save("../Desktop/fig1.pdf", fig) # save figure
+    save("../Desktop/fig2.pdf", fig) # save figure
 end

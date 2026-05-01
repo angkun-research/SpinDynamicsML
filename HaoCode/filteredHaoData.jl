@@ -57,12 +57,14 @@ energies = collect(energy_min:energy_step:energy_max)
 num_tasks = 250
 #results = DataFrame(Js=Vector{Float64}[], data=Vector{Float64}[], disp=Vector{Float64}[])
 # Store rows in a thread-safe way (no shared mutation inside threads)
-const RowT = NamedTuple{(:Js, :data, :disp, :B), Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}, Float64}}
+const RowT = NamedTuple{(:Js, :data, :disp, :B, :Bsats), Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}, Float64, Vector{Float64}}}
 rows = RowT[]
 
+#dir = [1.0, 0.0, 0.0]
 # Randomly sample Js from the Jsize dimensional space with each J in range -1 to 1
 for taskid in ProgressBar(1:num_tasks)
-    filetemp = load("data/HaoResults/results_task$(taskid)_of_$(num_tasks).jld2");
+    pt = "/Users/angkunwu/SpinDynamic.jl/data/HaoResults/"
+    filetemp = load(pt * "results_task$(taskid)_of_$(num_tasks).jld2");
     num_jobs = length(filetemp["Js_list"])
     local_rows = Vector{RowT}(undef, num_jobs)
     Threads.@threads for jobid in 1:num_jobs
@@ -72,10 +74,14 @@ for taskid in ProgressBar(1:num_tasks)
         norm2s = filetemp["norm2s_list"][jobid]
         qs_path = filetemp["qs_list"][jobid]
         B = filetemp["B_list"][jobid]
+        B_sat = zeros(3)
+        B_sat[1], _ = determine_B_sat(Js, [1.0, 0.0, 0.0])
+        B_sat[2], _ = determine_B_sat(Js, [0.0, 1.0, 0.0])
+        B_sat[3], _ = determine_B_sat(Js, [0.0, 0.0, 1.0])
         intensities = map_lanczos_results_to_neutron_intensities(qs_path, as, bs, norm2s, energies, η)
         Es_all, Ss_all = Float64[], Float64[]
         for k_ind in 1:length(qs_path)
-            E_temp, S_temp, keep_indices = adaptive_knots(energies, intensities[k_ind, :], N=20)
+            E_temp, S_temp, keep_indices = adaptive_knots(energies, intensities[k_ind, :], N=3)
             append!(Es_all, E_temp)
             append!(Ss_all, S_temp)
         end
@@ -86,7 +92,8 @@ for taskid in ProgressBar(1:num_tasks)
         #     vec(Ss_all),
         # ))
         # DO NOT push! to a shared DataFrame here
-        local_rows[jobid] = (Js = copy(Js), data = vec(Es_all), disp = vec(Ss_all), B = copy(B))
+        #local_rows[jobid] = (Js = copy(Js), data = vec(Es_all), disp = vec(Ss_all), B = copy(B), Bsats = vec(B_sat))
+        local_rows[jobid] = (Js = copy(Js), disp = vec(Es_all), data = vec(Ss_all), B = copy(B), Bsats = vec(B_sat))
     end
     append!(rows, local_rows)
     # if length(rows) >= 1000
@@ -95,4 +102,5 @@ for taskid in ProgressBar(1:num_tasks)
 end
 
 results = DataFrame(rows)
-CSV.write("data/HaoResults/Hao_anisotropy_Js5_Filter20.csv", results)
+pt = "/Users/angkunwu/SpinDynamic.jl/data/HaoResults/"
+CSV.write(pt * "Hao_anisotropy_Js5_Filter3_Bsats.csv", results)

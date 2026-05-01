@@ -159,8 +159,8 @@ def train(model, dataloader, optimizer, prev_updates, writer=None,device='cpu'):
         n_upd = prev_updates + batch_idx
         data = data.to(device)
         # flatten if needed
-        if data.dim() > 2:
-            data = data.view(data.size(0), -1)
+        # if data.dim() > 2:
+        #     data = data.view(data.size(0), -1)
         target = target.to(device)
         optimizer.zero_grad()
         output = model(data, target, compute_loss=True)
@@ -201,8 +201,8 @@ def test(model, dataloader, cur_step, writer=None,device='cpu'):
     with torch.no_grad():
         for data, target in tqdm(dataloader, desc='Testing'):
             data = data.to(device)
-            if data.dim() > 2:
-                data = data.view(data.size(0), -1)
+            # if data.dim() > 2:
+            #     data = data.view(data.size(0), -1)
             target = target.to(device)
             output = model(data, target, compute_loss=True)
             test_loss += output.loss.item()
@@ -491,43 +491,170 @@ class TransformerEncoder(nn.Module):
         )
 
 
+# class Conv1DEncoder(nn.Module):
+#     """
+#     Convolutional Autoencoder (supervised latent) class.
+#     Args:
+#         input_dim (int): dimension of input data
+#         hidden_dim (int): dimension of hidden layers
+#         latent_dim (int): dimension of latent space (should be 3 for J1,J2,J3)
+#     """
+#     def __init__(self,input_dim,in_channels=1, hidden_dim=128,latent_dim=3, 
+#                  kernel_size=3,mag_recon_loss=1.0,relative_loss=False, ifdecode=False):
+#         super(Conv1DEncoder, self).__init__()
+#         self.latent_dim = latent_dim
+#         self.input_dim = input_dim
+#         self.mag_recon_loss = mag_recon_loss
+#         self.relative_loss = relative_loss
+#         self.kernel_size = kernel_size
+#         self.ifdecode = ifdecode
+#         pad = (kernel_size-1) // 2
+#         k1, k2 = self.kernel_size, 3
+#         p1, p2 = (k1 - 1) // 2, (k2 - 1) // 2
+
+#         self.encoder = nn.Sequential(
+#             #nn.Conv1d(in_channels, hidden_dim, kernel_size=k1, padding=p1),  # first conv: k=5
+#             nn.Conv1d(in_channels, hidden_dim, kernel_size=k1,padding=p1,padding_mode='circular'),  # periodic padding to avoid edge effects
+#             nn.SiLU(),# Swish activation function
+#             nn.Conv1d(hidden_dim, hidden_dim, kernel_size=k2, padding=p2,padding_mode='circular'),    # second conv: k=3
+#             nn.SiLU(),
+#             nn.AdaptiveAvgPool1d(1),  # Ensure fixed output, shape (B, hidden_dim, 1)
+#             nn.Flatten(),  # Flatten back to 1D
+#             nn.Linear(hidden_dim, hidden_dim//2),  # Adjust dimensions for Conv2d output
+#             nn.SiLU(),
+#             nn.Linear(hidden_dim//2, latent_dim),
+#             nn.Tanh(),  # constrain latent space to [-1,1]
+#         )
+#         # Latent space is J1, J2, J3
+#         self.decoder = nn.Sequential(
+#             nn.Linear(latent_dim, hidden_dim),
+#             nn.SiLU(),
+#             nn.Linear(hidden_dim, hidden_dim*input_dim),  # Adjust dimensions for Conv2d output
+#             nn.SiLU(),
+#             nn.Unflatten(1, (hidden_dim, input_dim)),  # Reshape to (batch_size, channels=hidden_dim, width=1)
+#             #nn.Linear(hidden_dim, input_dim),  # expand to (B, hidden_dim, input_dim)
+#             nn.ConvTranspose1d(hidden_dim, in_channels, kernel_size=kernel_size, padding=pad,output_padding=0),#pad-1),  # Transpose Conv2d layer
+#             nn.Flatten(),  # Flatten back to 1D
+#         )
+    
+#     def encode(self, x, eps: float = 1e-8):
+#         """
+#         Encodes the input into the latent space.
+#         Args:
+#             x (torch.Tensor): Input data
+#         Returns:
+#             torch.Tensor: Encoded data in the latent space
+#         """
+#         #print("Encoded x shape:", x.shape)
+#         z = self.encoder(x)
+#         return z
+
+#     def decode(self, z):
+#         """
+#         Decodes the data from the latent space to the original input space.
+#         Args:
+#             z (torch.Tensor): Data in the latent space
+#         Returns:
+#             torch.Tensor: Reconstructed data in the original input space
+#         """
+#         recon_x = self.decoder(z)
+#         # reshape to (B, input_dim)
+#         #recon_x = recon_x.view(recon_x.size(0), -1)
+#         return recon_x
+    
+#     def forward(self, x, y: Optional[torch.Tensor] = None, compute_loss: bool = True):
+#         # convert from (B, input_dim) to (B, in_channels, input_dim)
+#         x_shape = x.view(x.size(0), 1, x.size(1))
+#         # encode / decode
+#         z = self.encode(x_shape)
+#         recon_x = self.decode(z)
+
+#         if self.ifdecode:
+#             recon_x = self.decode(z)
+#         else:
+#             recon_x = torch.zeros_like(x)  # set to zero tensor of same shape as x
+#         if self.ifdecode:
+#             loss_recon = F.mse_loss(recon_x, x, reduction='mean') * self.mag_recon_loss
+#         else:
+#             loss_recon = torch.tensor(0.0, device=x.device)
+
+#         if not compute_loss:
+#             return AutoEncoderOutput(z=z, x_recon=recon_x, loss=None, loss_recon=None, latent_loss=None)
+
+#         #loss_recon = F.mse_loss(recon_x, x, reduction='mean') * self.mag_recon_loss
+#         target_J = y.to(z.dtype).to(z.device)
+#         loss_latent = F.mse_loss(z, target_J, reduction='sum')
+#         loss = loss_recon + loss_latent
+
+#         tsl = F.mse_loss(z, target_J, reduction='sum')
+#         rel_err = ((z - target_J)**2) / ((target_J.abs())**2)
+#         rel_err = rel_err.sum()
+#         if self.relative_loss:
+#             loss_latent = rel_err
+#         else:
+#             loss_latent = tsl
+
+#         loss = loss_recon + loss_latent
+
+#         return AutoEncoderOutput(
+#             z = z,
+#             x_recon = recon_x,
+#             loss = loss,
+#             loss_recon = loss_recon,
+#             latent_loss = loss_latent,
+#             relative_loss = rel_err,
+#         )
+
 class Conv1DEncoder(nn.Module):
     """
     Convolutional Autoencoder (supervised latent) class.
-    Args:
-        input_dim (int): dimension of input data
-        hidden_dim (int): dimension of hidden layers
-        latent_dim (int): dimension of latent space (should be 3 for J1,J2,J3)
     """
-    def __init__(self,input_dim,in_channels=1, hidden_dim=128,latent_dim=3, kernel_size=3,mag_recon_loss=1.0):
+    def __init__(self,in_channels=1, hidden_dim=128,latent_dim=3, 
+                 kernel_size=3,mag_recon_loss=1.0,relative_loss=False, ifdecode=False):
         super(Conv1DEncoder, self).__init__()
         self.latent_dim = latent_dim
-        self.input_dim = input_dim
         self.mag_recon_loss = mag_recon_loss
+        self.relative_loss = relative_loss
         self.kernel_size = kernel_size
+        self.in_channels = in_channels
+        self.hidden_dim = hidden_dim
+        self.ifdecode = ifdecode
+        self.input_length = None # Will be built on first forward pass
+        self.decoder = None  # Will be built on first forward pass
+    
         pad = (kernel_size-1) // 2
-        #print(f"pad size: {pad}")
-
+        k1, k2 = self.kernel_size, 3
+        p1, p2 = (k1 - 1) // 2, (k2 - 1) // 2
+        # Store for lazy decoder initialization
+        self.pad = pad
+        self.k1, self.k2 = k1, k2
+        self.p1, self.p2 = p1, p2
+        
         self.encoder = nn.Sequential(
-            nn.Conv1d(in_channels, hidden_dim, kernel_size=kernel_size, padding=pad),
-            nn.SiLU(), # Swish activation function
+            nn.Conv1d(in_channels, hidden_dim, kernel_size=k1,padding=p1,padding_mode='circular'),  # periodic padding to avoid edge effects
+            nn.SiLU(),# Swish activation function
+            nn.Conv1d(hidden_dim, hidden_dim, kernel_size=k2, padding=p2,padding_mode='circular'),    # second conv: k=3
+            nn.SiLU(),
             nn.AdaptiveAvgPool1d(1),  # Ensure fixed output, shape (B, hidden_dim, 1)
             nn.Flatten(),  # Flatten back to 1D
-            nn.Linear(hidden_dim, hidden_dim),  # Adjust dimensions for Conv2d output
+            nn.Linear(hidden_dim, hidden_dim//2),  # Adjust dimensions for Conv2d output
             nn.SiLU(),
-            nn.Linear(hidden_dim, latent_dim),
+            nn.Linear(hidden_dim//2, latent_dim),
             nn.Tanh(),  # constrain latent space to [-1,1]
         )
-        # Latent space is J1, J2, J3
+
+    def _build_decoder(self, input_length):
+        """Lazily build decoder with known input_length."""
         self.decoder = nn.Sequential(
-            nn.Linear(latent_dim, hidden_dim),
+            nn.Linear(self.latent_dim, self.hidden_dim),
             nn.SiLU(),
-            nn.Linear(hidden_dim, hidden_dim*input_dim),  # Adjust dimensions for Conv2d output
+            nn.Linear(self.hidden_dim, self.hidden_dim * input_length),
             nn.SiLU(),
-            nn.Unflatten(1, (hidden_dim, input_dim)),  # Reshape to (batch_size, channels=hidden_dim, width=1)
-            #nn.Linear(hidden_dim, input_dim),  # expand to (B, hidden_dim, input_dim)
-            nn.ConvTranspose1d(hidden_dim, in_channels, kernel_size=kernel_size, padding=pad,output_padding=pad-1),  # Transpose Conv2d layer
-            nn.Flatten(),  # Flatten back to 1D
+            nn.Unflatten(1, (self.hidden_dim, input_length)),
+            nn.ConvTranspose1d(self.hidden_dim, self.hidden_dim, kernel_size=self.k2, padding=self.p2),
+            # circular padding in ConvTranspose1d is not directly supported, maybe add manual circular padding in forward pass
+            nn.SiLU(),
+            nn.ConvTranspose1d(self.hidden_dim, self.in_channels, kernel_size=self.k1, padding=self.p1),
         )
     
     def encode(self, x, eps: float = 1e-8):
@@ -551,28 +678,56 @@ class Conv1DEncoder(nn.Module):
             torch.Tensor: Reconstructed data in the original input space
         """
         recon_x = self.decoder(z)
-        # reshape to (B, input_dim)
-        #recon_x = recon_x.view(recon_x.size(0), -1)
         return recon_x
     
     def forward(self, x, y: Optional[torch.Tensor] = None, compute_loss: bool = True):
         # convert from (B, input_dim) to (B, in_channels, input_dim)
-        x_shape = x.view(x.size(0), 1, x.size(1))
+        x_shape = x if x.dim() == 3 else x.view(x.size(0), 2, -1)
+        
+        # Initialize decoder on first forward pass
+        if self.input_length is None:
+            self.input_length = x_shape.size(2)
+            self._build_decoder(self.input_length)
+
         # encode / decode
         z = self.encode(x_shape)
         recon_x = self.decode(z)
 
+        if self.ifdecode:
+            recon_x = self.decode(z)
+        else:
+            recon_x = torch.zeros_like(x)  # set to zero tensor of same shape as x
+        if self.ifdecode:
+            loss_recon = F.mse_loss(recon_x, x, reduction='mean') * self.mag_recon_loss
+        else:
+            loss_recon = torch.tensor(0.0, device=x.device)
+
         if not compute_loss:
             return AutoEncoderOutput(z=z, x_recon=recon_x, loss=None, loss_recon=None, latent_loss=None)
 
-        loss_recon = F.mse_loss(recon_x, x, reduction='mean') * self.mag_recon_loss
+        #loss_recon = F.mse_loss(recon_x, x, reduction='mean') * self.mag_recon_loss
         target_J = y.to(z.dtype).to(z.device)
         loss_latent = F.mse_loss(z, target_J, reduction='sum')
         loss = loss_recon + loss_latent
 
-        return AutoEncoderOutput(z=z, x_recon=recon_x, loss=loss, loss_recon=loss_recon, latent_loss=loss_latent)
+        tsl = F.mse_loss(z, target_J, reduction='sum')
+        rel_err = ((z - target_J)**2) / ((target_J.abs())**2)
+        rel_err = rel_err.sum()
+        if self.relative_loss:
+            loss_latent = rel_err
+        else:
+            loss_latent = tsl
 
+        loss = loss_recon + loss_latent
 
+        return AutoEncoderOutput(
+            z = z,
+            x_recon = recon_x,
+            loss = loss,
+            loss_recon = loss_recon,
+            latent_loss = loss_latent,
+            relative_loss = rel_err,
+        )
 
 
 
@@ -1151,3 +1306,173 @@ class ResNetEncoder(nn.Module):
         loss_recon = torch.tensor(0.0, device=x.device)
 
         return AutoEncoderOutput(z=z, x_recon=None, loss=loss, loss_recon=loss_recon, latent_loss=loss_latent)
+    
+
+class FCBsatDecoder(nn.Module):
+    def __init__(
+        self,
+        input_dim,
+        hidden_dim=1024,
+        latent_dim=3,
+        mag_recon_loss=1.0,
+        ifdecode=True,
+        relative_loss=False,
+        bsat_index=-1,
+    ):
+        super(FCBsatDecoder, self).__init__()
+        self.latent_dim = latent_dim
+        self.mag_recon_loss = mag_recon_loss
+        self.ifdecode = ifdecode
+        self.relative_loss = relative_loss
+        self.bsat_index = bsat_index
+
+        self.encoder = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.SiLU(),
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.SiLU(),
+            nn.Linear(hidden_dim // 2, hidden_dim // 4),
+            nn.SiLU(),
+            nn.Linear(hidden_dim // 4, hidden_dim // 8),
+            nn.SiLU(),
+            nn.Linear(hidden_dim // 8, latent_dim),
+        )
+
+        # Decoder now predicts only Bsat (shape [B,1])
+        self.decoder = nn.Sequential(
+            nn.Linear(latent_dim, hidden_dim // 8),
+            nn.SiLU(),
+            nn.Linear(hidden_dim // 8, hidden_dim),
+            nn.SiLU(),
+            nn.Linear(hidden_dim, 1),
+        )
+
+    def encode(self, x, eps: float = 1e-8):
+        z = self.encoder(x)
+        z = torch.tanh(z)
+        return z
+
+    def decode(self, z):
+        return self.decoder(z)
+
+    def forward(
+        self,
+        x,
+        y: Optional[torch.Tensor] = None,
+        bsat_target: Optional[torch.Tensor] = None,
+        compute_loss: bool = True,
+    ):
+        z = self.encode(x)
+
+        if self.ifdecode:
+            recon_bsat = self.decode(z)  # [B,1]
+        else:
+            recon_bsat = torch.zeros((x.size(0), 1), device=x.device, dtype=x.dtype)
+
+        if not compute_loss:
+            return AutoEncoderOutput(z=z, x_recon=recon_bsat, loss=None, loss_recon=None, latent_loss=None)
+
+        if bsat_target is None:
+            # fallback: use Bsat feature from input
+            bsat_target = x[:, self.bsat_index].unsqueeze(1)
+
+        bsat_target = bsat_target.to(z.dtype).to(z.device)
+
+        if self.ifdecode:
+            loss_recon = F.mse_loss(recon_bsat, bsat_target, reduction='sum') * self.mag_recon_loss
+        else:
+            loss_recon = torch.tensor(0.0, device=x.device)
+
+        target_J = y.to(z.dtype).to(z.device)
+        tsl = F.mse_loss(z, target_J, reduction='sum')
+        rel_err = ((z - target_J) ** 2) / ((target_J.abs()) ** 2 + 1e-12)
+        rel_err = rel_err.sum()
+        loss_latent = rel_err if self.relative_loss else tsl
+
+        loss = loss_recon + loss_latent
+
+        return AutoEncoderOutput(
+            z=z,
+            x_recon=recon_bsat,
+            loss=loss,
+            loss_recon=loss_recon,
+            latent_loss=loss_latent,
+            relative_loss=rel_err,
+        )
+    
+
+class FCBsats3Decoder(nn.Module):
+    def __init__(
+        self,
+        input_dim,
+        hidden_dim=1024,
+        latent_dim=3,
+        mag_recon_loss=1.0,
+        ifdecode=True,
+        relative_loss=False,
+        bsat_dim=3,                       # NEW
+        bsat_slice=slice(-3, None),       # NEW: where Bsat vector lives in x
+    ):
+        super().__init__()
+        self.latent_dim = latent_dim
+        self.mag_recon_loss = mag_recon_loss
+        self.ifdecode = ifdecode
+        self.relative_loss = relative_loss
+        self.bsat_dim = bsat_dim
+        self.bsat_slice = bsat_slice
+
+        self.encoder = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim), nn.SiLU(),
+            nn.Linear(hidden_dim, hidden_dim // 2), nn.SiLU(),
+            nn.Linear(hidden_dim // 2, hidden_dim // 4), nn.SiLU(),
+            nn.Linear(hidden_dim // 4, hidden_dim // 8), nn.SiLU(),
+            nn.Linear(hidden_dim // 8, latent_dim),
+        )
+
+        self.decoder = nn.Sequential(
+            nn.Linear(latent_dim, hidden_dim // 8), nn.SiLU(),
+            nn.Linear(hidden_dim // 8, hidden_dim), nn.SiLU(),
+            nn.Linear(hidden_dim, bsat_dim),
+        )
+
+    def encode(self, x):
+        return torch.tanh(self.encoder(x))
+
+    def decode(self, z):
+        return self.decoder(z)
+
+    def forward(self, x, y=None, bsat_target=None, compute_loss=True):
+        z = self.encode(x)
+
+        if self.ifdecode:
+            recon_bsat = self.decode(z)   # [B, bsat_dim]
+        else:
+            recon_bsat = torch.zeros((x.size(0), self.bsat_dim), device=x.device, dtype=x.dtype)
+
+        if not compute_loss:
+            return AutoEncoderOutput(z=z, x_recon=recon_bsat, loss=None, loss_recon=None, latent_loss=None)
+
+        if bsat_target is None:
+            # CHANGED: fallback to vector slice
+            bsat_target = x[:, self.bsat_slice]   # [B, bsat_dim]
+
+        bsat_target = bsat_target.to(z.dtype).to(z.device)
+        if bsat_target.dim() == 1:
+            bsat_target = bsat_target.unsqueeze(1)
+
+        if self.ifdecode:
+            loss_recon = F.mse_loss(recon_bsat, bsat_target, reduction="sum") * self.mag_recon_loss
+        else:
+            loss_recon = torch.tensor(0.0, device=x.device)
+
+        target_J = y.to(z.dtype).to(z.device)
+        tsl = F.mse_loss(z, target_J, reduction="sum")
+        rel_err = ((z - target_J) ** 2) / ((target_J.abs()) ** 2 + 1e-12)
+        rel_err = rel_err.sum()
+        loss_latent = rel_err if self.relative_loss else tsl
+        loss = loss_recon + loss_latent
+
+        return AutoEncoderOutput(
+            z=z, x_recon=recon_bsat, loss=loss,
+            loss_recon=loss_recon, latent_loss=loss_latent, relative_loss=rel_err,
+        )

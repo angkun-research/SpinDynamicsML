@@ -5,14 +5,19 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from AutoEncoderClass import FCautoencoder
+from AutoEncoderClass import FCautoencoder, Conv1DEncoder
 
 # --- Config (match training settings) ---
-CSV_PATH = './data/triangular_heisenberg_Js10_h20_qsBZ.csv'
+#CSV_PATH = './data/triangular_heisenberg_Js10_h20_qsBZ.csv'
+#CSV_PATH = './data/HaoResults/Hao_anisotropy_Js4_Bdep.csv'
+#CSV_PATH = './data/HaoResults/Hao_anisotropy_Js5_S6tensor_Filter20_Bsats.csv'
+CSV_PATH = './data/triangular_anisotropy_uniform_Js4_B50_Nk20.csv'
 MODEL_OUT = './data/'
-CHECKPOINT = os.path.join(MODEL_OUT, 'FCAE_HC_Js10_epoch100_tanhx3.pth')  # adjust if different
+#CHECKPOINT = os.path.join(MODEL_OUT, 'FCAE_anisotropy_LSWT_Js4_epoch100.pth') #'FCAE_HC_Js10_epoch100.pth') #tanhx3.pth')  # adjust if different
+CHECKPOINT = os.path.join(MODEL_OUT, 'FCAE_anisotropy_LSWT_Js4_epoch100_N250000.pth') # adjust if different
+#CHECKPOINT = os.path.join(MODEL_OUT, 'ConvChannel_anisotropy_LSWT_Js4_epoch100_N250000.pth') # adjust if different
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-BATCH_SIZE = 200
+BATCH_SIZE = 100
 
 # --- Load dataset ---
 df = pd.read_csv(CSV_PATH)
@@ -20,11 +25,32 @@ for col in ['data', 'disp', 'Js']:
     df[col] = df[col].apply(json.loads)
 
 X = np.array([row['data'] + row['disp'] for _, row in df.iterrows()], dtype=np.float32)
+#X = np.array([row['data'] + row['disp'] + [float(row["B"])] for _, row in df.iterrows()], dtype=np.float32)
+
+# disp = np.array(df['disp'].tolist(), dtype=np.float32)   # (N, L)
+# inten = np.array(df['data'].tolist(), dtype=np.float32)  # (N, L)
+# N = len(df)
+# n_comp = 6
+# n_k = 12
+# n_e = 20 #3 #20
+# # Recover (N, 6, 12, 20)
+# disp4 = disp.reshape(N, n_comp, n_k, n_e)
+# inten4 = inten.reshape(N, n_comp, n_k, n_e)
+# # Move energy before momentum, then flatten (component, energy) -> channels
+# # (N, 6, 20, 12) -> (N, 120, 12)
+# disp_ch = np.transpose(disp4, (0, 1, 3, 2)).reshape(N, n_comp * n_e, n_k)
+# data_ch = np.transpose(inten4, (0, 1, 3, 2)).reshape(N, n_comp * n_e, n_k)
+# X = np.concatenate([disp_ch, data_ch], axis=1)
+
+#X = np.stack([disp, inten], axis=1)  # (N, 2, L)
+
 y = np.array(df['Js'].tolist(), dtype=np.float32)
+y[:, 1] *= y[:, 0]   # make J[1] dimensionful by multiplying by J[0] elementwise
 
 # load normalization if present in checkpoint
 ckpt = torch.load(CHECKPOINT, map_location='cpu',weights_only=False)
 X_mean = ckpt.get('X_mean', X.mean(axis=0, keepdims=True))
+print("shape of X_mean:", X_mean.shape)
 X_std = ckpt.get('X_std', X.std(axis=0, keepdims=True) + 1e-8)
 
 X = (X - X_mean) / X_std
@@ -39,6 +65,13 @@ loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=Fal
 NumOfJ = y.shape[1]
 input_dim = X.shape[1]
 model = FCautoencoder(input_dim=input_dim, hidden_dim=1024, latent_dim=NumOfJ).to(DEVICE)
+# in_channels = X.shape[1]  # number of channels for Conv1DEncoder
+# mag_recon_loss = 0.0
+# model = Conv1DEncoder(in_channels=in_channels, hidden_dim=64, latent_dim=NumOfJ, kernel_size=5,mag_recon_loss=mag_recon_loss).to(DEVICE)
+# dummy_x = torch.zeros(1, in_channels, X.shape[2], device=DEVICE)
+# with torch.no_grad():
+#     _ = model(dummy_x, compute_loss=False) # builds decoder lazily
+
 model.load_state_dict(ckpt['model_state'])
 model.eval()
 
@@ -100,6 +133,23 @@ squared_errors = (preds - trues) ** 2
 NumOfJ_detected = squared_errors.shape[1]
 print("Squared errors shape:", squared_errors.shape)
 
+# --- Load dataset ---
+# df_single = pd.read_csv('./data/triangular_heisenberg_Js10_h20_qsBZ_single.csv')
+# for col in ['data', 'disp', 'Js']:
+#     df_single[col] = df_single[col].apply(json.loads)
+
+# X_single = np.array([row['data'] + row['disp'] for _, row in df_single.iterrows()], dtype=np.float32)
+# y_single = np.array(df_single['Js'].tolist(), dtype=np.float32)
+
+# X_single = (X_single - X_mean) / X_std
+# X_single_t = torch.from_numpy(X_single)
+# with torch.no_grad():
+#     X_single_t = X_single_t.to(DEVICE)
+#     z_single = extract_latent(model, X_single_t, y_single.shape[1])
+#     z_single = z_single.cpu().numpy()
+
+# print("Single sample prediction:", z_single)
+
 #os.makedirs(MODEL_OUT, exist_ok=True)
 
 # 1) Mean squared error vs coupling index
@@ -111,11 +161,13 @@ print("Squared errors shape:", squared_errors.shape)
 # plt.title('Mean squared error per coupling index')
 # plt.grid(True)
 # plt.tight_layout()
+# outname = '/Users/angkunwu/Desktop/mse_per_coupling_Nk20.png'
+# plt.savefig(outname, dpi=300)
 # plt.show()
-# plt.savefig(os.path.join('../Desktop/', 'mse_per_coupling_Nk20.png'), dpi=200)
+# #plt.savefig(os.path.join('../Desktop/', 'mse_per_coupling_Nk20.png'), dpi=200)
 # plt.close()
 
-# # 2) Relative error vs |J_k| (one subplot per k)
+# 2) Relative error vs |J_k| (one subplot per k)
 # ncols = 5
 # nrows = int(np.ceil(NumOfJ_detected / ncols))
 # fig, axes = plt.subplots(nrows, ncols, figsize=(4*ncols, 3*nrows), squeeze=False)
@@ -145,21 +197,73 @@ print("Squared errors shape:", squared_errors.shape)
 
 # print("Saved: mse_per_coupling_index.png, mse_vs_J_magnitude.png in", MODEL_OUT)
 
+Label_list = [r'$J_1^0$', r'$J_1^0\Delta$', r'$J_{\pm\pm}$', r'$J_2^0$']
+#Label_list = [r'$J_1^0$', r'$J_1^0\Delta$', r'$J_{\pm\pm}$', r'$J_{z\pm}$', r'$J_2^0$']
+# 1b) Error distribution per coupling component J_k
+errors = preds - trues   # signed error: (pred - true)
 
-# --- Load dataset ---
-df_single = pd.read_csv('./data/triangular_heisenberg_Js10_h20_qsBZ_single.csv')
-for col in ['data', 'disp', 'Js']:
-    df_single[col] = df_single[col].apply(json.loads)
+ncols = NumOfJ_detected
+nrows = int(np.ceil(NumOfJ_detected / ncols))
+fig, axes = plt.subplots(nrows, ncols, figsize=(4*ncols, 3*nrows), squeeze=False)
 
-X_single = np.array([row['data'] + row['disp'] for _, row in df_single.iterrows()], dtype=np.float32)
-y_single = np.array(df_single['Js'].tolist(), dtype=np.float32)
+for k in range(NumOfJ_detected):
+    r = k // ncols
+    c = k % ncols
+    ax = axes[r][c]
 
-X_single = (X_single - X_mean) / X_std
-X_single_t = torch.from_numpy(X_single)
-with torch.no_grad():
-    X_single_t = X_single_t.to(DEVICE)
-    z_single = extract_latent(model, X_single_t, y_single.shape[1])
-    z_single = z_single.cpu().numpy()
+    ek = errors[:, k]
+    ax.hist(ek, bins=40, density=True, alpha=0.75, edgecolor='black')
+    ax.axvline(0.0, color='red', linestyle='--', linewidth=1)  # perfect prediction
+    ax.set_title(Label_list[k])#f'J_{k+1}')
+    ax.set_xlabel('Prediction error (pred - true)')
+    ax.set_ylabel('Density')
+    ax.grid(True, alpha=0.3)
 
-print("Single sample prediction:", z_single)
+# hide unused axes
+for k in range(NumOfJ_detected, nrows * ncols):
+    r = k // ncols
+    c = k % ncols
+    axes[r][c].axis('off')
 
+plt.tight_layout()
+plt.savefig('/Users/angkunwu/Desktop/error_distribution_per_J.png', dpi=300)
+plt.show()
+plt.close()
+
+
+# 3) J_true vs J_pred for each coupling component J_k
+ncols = NumOfJ_detected
+nrows = int(np.ceil(NumOfJ_detected / ncols))
+fig, axes = plt.subplots(nrows, ncols, figsize=(4 * ncols, 3.5 * nrows), squeeze=False)
+
+for k in range(NumOfJ_detected):
+    r = k // ncols
+    c = k % ncols
+    ax = axes[r][c]
+
+    jt = trues[:, k]
+    jp = preds[:, k]
+
+    # scatter points
+    ax.scatter(jt, jp, s=8, alpha=0.5)
+
+    # ideal line y = x
+    vmin = min(jt.min(), jp.min())
+    vmax = max(jt.max(), jp.max())
+    ax.plot([vmin, vmax], [vmin, vmax], 'r--', linewidth=1)
+
+    ax.set_title(Label_list[k])#f'J_{k+1}')
+    ax.set_xlabel('J_true')
+    ax.set_ylabel('J_pred')
+    ax.grid(True, alpha=0.3)
+
+# hide unused axes
+for k in range(NumOfJ_detected, nrows * ncols):
+    r = k // ncols
+    c = k % ncols
+    axes[r][c].axis('off')
+
+plt.tight_layout()
+plt.savefig('/Users/angkunwu/Desktop/Jtrue_vs_Jpred_per_component.png', dpi=300)
+plt.show()
+plt.close()

@@ -192,7 +192,7 @@ function triangular_nlswt_lanczos_calculations(Js, clustersize, dir; B=nothing, 
     units = Units(:meV, :angstrom)
 
     B_sat, sys_min = determine_B_sat(Js, dir; opts...)
-    @show B_sat
+    #@show B_sat
     # If B is not provided, pick a value between 1.1 and 1.2 times the saturation field.
     B = isnothing(B) ? (1.1 + 0.1 * rand()) * B_sat : B
 

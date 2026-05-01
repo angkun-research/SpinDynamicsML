@@ -15,12 +15,16 @@ num_tasks = 250
 result = load("data/HaoResults/results_task$(taskid)_of_$(num_tasks).jld2");
 jobid = 3 #33, 2
 Js = result["Js_list"][jobid]
-as = result["as_list"][jobid]
-bs = result["bs_list"][jobid]
-norm2s = result["norm2s_list"][jobid]
-qs_path = result["qs_list"][jobid]
-B = result["B_list"][jobid]
+# as = result["as_list"][jobid]
+# bs = result["bs_list"][jobid]
+# norm2s = result["norm2s_list"][jobid]
+# qs_path = result["qs_list"][jobid]
+# B = result["B_list"][jobid]
+#Js[4] = 0.0 # set Jzpm to zero for now
 
+clustersize = (11, 11, 1)
+dir = [1.0, 0.0, 0.0]
+B, qs_path, as_path, bs_path, norm2s_path = triangular_nlswt_lanczos_calculations(Js, clustersize,dir)
 intensities = map_lanczos_results_to_neutron_intensities(qs_path, as, bs, norm2s, energies, η)
 
 hs = [i/12 for i in 0:12]
@@ -84,6 +88,77 @@ fig = plot_intensities(res; units, title="Triangular Lattice")
 
 #save("../Desktop/fig2.pdf", fig) # save figure
 
+function lswt_to_heatmap(disp, data, energies; η=0.2)
+    nbands, nq = size(disp)
+    img = zeros(Float64, nq, length(energies))
+
+    for j in 1:nq
+        for b in 1:nbands
+            E0 = disp[b, j]
+            A = data[b, j]
+            img[j, :] .+= A .* (η / π) ./ ((energies .- E0).^2 .+ η^2)
+        end
+    end
+
+    return img
+end
+lswt_img = lswt_to_heatmap(res.disp, res.data, energies; η=η)
+hs_lswt = collect(LinRange(0, 1, 13))
+
+# Js5 = Js
+# Js4 = Js
+# Js4[4] = 0.0
+# B, qs_path, as_path, bs_path, norm2s_path = triangular_nlswt_lanczos_calculations(Js5, clustersize,dir)
+# intensities1 = map_lanczos_results_to_neutron_intensities(qs_path, as_path, bs_path, norm2s_path, energies, η)
+# B, qs_path, as_path, bs_path, norm2s_path = triangular_nlswt_lanczos_calculations(Js4, clustersize,dir)
+# intensities2 = map_lanczos_results_to_neutron_intensities(qs_path, as_path, bs_path, norm2s_path, energies, η)
+# intensities = abs.(intensities1 .- intensities2)
+
+# res = Run_LSWT(Js5, B)
+# lswt_img1 = lswt_to_heatmap(res.disp, res.data, energies; η=η)
+# res = Run_LSWT(Js4, B)
+# lswt_img2 = lswt_to_heatmap(res.disp, res.data, energies; η=η)
+# lswt_img = abs.(lswt_img1 .- lswt_img2)
+
+with_theme(theme_latexfonts()) do
+    fig = Figure(size=(900, 1200))
+
+    ax1 = Axis(fig[1, 1];
+        xlabel=L"(H,H,0)",
+        ylabel="Energy (meV)",
+        title="Hao's Result",
+        xlabelsize=30, ylabelsize=30, titlesize=30,
+        xticklabelsize=25, yticklabelsize=25)
+
+    hm1 = heatmap!(ax1, hs, energies, intensities;
+        colormap=:viridis, colorrange=(0, 2.5))
+
+    text!(ax1, 0.05, 15,
+        text="J1, Δ, J1pmpm, J1zpm, J2 = $(round.(Js, digits=3))",
+        align=(:left, :top), fontsize=16, color=:white)
+    text!(ax1, 0.05, 13,
+        text="B = $(round(B, digits=3)) T",
+        align=(:left, :top), fontsize=16, color=:white)
+    ylims!(ax1, 0, 20)
+
+    ax2 = Axis(fig[2, 1];
+        xlabel=L"(H,H,0)",
+        ylabel="Energy (meV)",
+        title="LSWT Heatmap",
+        xlabelsize=30, ylabelsize=30, titlesize=30,
+        xticklabelsize=25, yticklabelsize=25)
+
+    hm2 = heatmap!(ax2, hs_lswt, energies, lswt_img;
+        colormap=:viridis, colorrange=(0, 2.5))
+    ylims!(ax2, 0, 20)
+
+    linkxaxes!(ax1, ax2)
+    linkyaxes!(ax1, ax2)
+
+    Colorbar(fig[:, 2], hm1)
+    fig
+    save("../Desktop/fig2.pdf", fig)
+end
 
 """
 Select N representative points (ω[k], S[k]) using greedy max interpolation error.

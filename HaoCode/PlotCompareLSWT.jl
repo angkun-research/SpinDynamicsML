@@ -27,7 +27,7 @@ function Run_LSWT(Js,B; dims = (1,1,1))
 
     swt = SpinWaveTheory(sys; measure=ssf_perp(sys))
 
-    polarize_system!(sys)
+    polarize_system!(sys, [-1, 0, 0])
 
     swt = SpinWaveTheory(sys; measure=ssf_perp(sys))
     res = intensities_bands(swt, path)
@@ -42,14 +42,16 @@ Js = zeros(Jsize, nsample)
 # Js[:, 2] = [0.67246586, 0.42533526, 0.61599827, -0.09850078, 0.61625373]
 # Js[:, 1] = [0.18784128, 0.27096057, 0.52975523, 0.2925026, 0.3287352]
 # Js[:, 2] = [0.16038370, 0.2801616, 0.5479578, 0.08557, 0.32782653]
-Js[:, 1] = [0.14007732, 0.9819725, 0.08231799, -0.34657982, 0.09762552]
-Js[:, 2] = [0.18598570, 0.88416976, 0.07183129, -0.11190467, 0.11418682]
+# Js[:, 1] = [0.14007732, 0.9819725, 0.08231799, -0.34657982, 0.09762552]
+# Js[:, 2] = [0.18598570, 0.88416976, 0.07183129, -0.11190467, 0.11418682]
+Js[:, 1] = [0.18528450, 0.3799364, 0.0997716, 0.0, 0.15968098]
+Js[:, 2] = [0.18454248, 0.36088723, 0.09116103, 0.0, 0.14141127]
 
 res = zeros(12, nsample)
 
 # Randomly sample Js from the Jsize dimensional space with each J in range -1 to 1
 for sample_idx in 1:nsample
-    B_sat, _ = determine_B_sat(Js[:, sample_idx])
+    B_sat, _ = determine_B_sat(Js[:, sample_idx],[1, 0, 0])
     restemp = Run_LSWT(Js[:, sample_idx], B_sat)
     res[:, sample_idx] = vec(restemp.disp)
 end

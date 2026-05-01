@@ -10,7 +10,7 @@ function polarize_system!(sys)
     end
 end
 
-function Run_LSWT(Js,B; dims = (1,1,1))
+function Run_LSWT(Js,B; dims = (1,1,1),Nk=12)
     J1, Δ, Jpmpm, Jzpm, J2 = Js
     units = Units(:meV, :angstrom)
     a = 4.1149
@@ -19,7 +19,7 @@ function Run_LSWT(Js,B; dims = (1,1,1))
     positions = [[0, 0, 0]]
     cryst = Crystal(latvecs, positions, 162)
     qs = [[0, 0, 0], [1, 1, 0]]
-    path = q_space_path(cryst,qs,12)
+    path = q_space_path(cryst,qs,Nk)
 
     # g-tensor for KYbSe₂
     gab, gcc = 3.13*1.09310, 1.01
@@ -32,7 +32,7 @@ function Run_LSWT(Js,B; dims = (1,1,1))
     set_exchange!(sys, J2, Bond(1, 1, [1, 2, 0]))
     set_field!(sys, [B, 0, 0] * units.T)
 
-    swt = SpinWaveTheory(sys; measure=ssf_perp(sys))
+    #swt = SpinWaveTheory(sys; measure=ssf_perp(sys))
 
     # randomize_spins!(sys)
     # minimize_energy!(sys)
@@ -46,34 +46,71 @@ function Run_LSWT(Js,B; dims = (1,1,1))
 end
 
 
-Jsize = 5
-num_tasks = 250
-#B_same = 20
-results = DataFrame(Js=Vector{Float64}[], data=Vector{Float64}[], disp=Vector{Float64}[], B = Float64[])
+# Jsize = 5
+# num_tasks = 250
+# B_same = 20
+# results = DataFrame(Js=Vector{Float64}[], data=Vector{Float64}[], disp=Vector{Float64}[], B = Float64[])
 
-# Randomly sample Js from the Jsize dimensional space with each J in range -1 to 1
-for taskid in ProgressBar(1:num_tasks)
-    filetemp = load("data/HaoResults/results_task$(taskid)_of_$(num_tasks).jld2");
-    num_jobs = length(filetemp["Js_list"])
-    for jobid in 1:num_jobs
-        Js = filetemp["Js_list"][jobid]
-        B = filetemp["B_list"][jobid]
-        Js[4] = 0.0
-        res = Run_LSWT(Js, B; dims=(1, 1, 1))
-        #res = Run_LSWT(Js, B_same)
-        push!(results, (
-            copy(Js[[1, 2, 3, 5]]), # only keep J1, Δ, J1pmpm, J2
-            vec(res.data),
-            vec(res.disp),
-            copy(B),
-        ))
+# for taskid in ProgressBar(1:num_tasks)
+#     filetemp = load("data/HaoResults/results_task$(taskid)_of_$(num_tasks).jld2");
+#     num_jobs = length(filetemp["Js_list"])
+#     for jobid in 1:num_jobs
+#         Js = filetemp["Js_list"][jobid]
+#         B = filetemp["B_list"][jobid]
+#         Js[4] = 0.0
+#         res = Run_LSWT(Js, B; dims=(1, 1, 1))
+#         #res = Run_LSWT(Js, B_same)
+#         push!(results, (
+#             copy(Js[[1, 2, 3, 5]]), # only keep J1, Δ, J1pmpm, J2
+#             vec(res.data),
+#             vec(res.disp),
+#             copy(B),
+#         ))
+#     end
+# end
+
+Jsize = 4
+N_uniform = 50
+Nk=20
+Nsamples = 2*N_uniform^(Jsize-1)
+Js_all = Vector{Float64}[]
+for J10 in [-1,1]
+    for ΔJ10 in collect(range(-1, 1, length=N_uniform+1))
+        Δ = ΔJ10 / J10
+        if Δ == 0.0
+            continue
+        end
+        for Jpmpm in collect(range(-1, 1, length=N_uniform+1))
+            if Jpmpm == 0.0
+                continue
+            end
+            for J20 in collect(range(-1, 1, length=N_uniform+1))
+                if J20 == 0.0
+                    continue
+                end
+                Js = [J10, Δ, Jpmpm, 0.0, J20]
+                push!(Js_all, Js)
+            end
+        end
     end
 end
+B_same = 50
+results = DataFrame(Js=Vector{Float64}[], data=Vector{Float64}[], disp=Vector{Float64}[])
 
-# println(rs)
-# println(Js)
+# Uniformly sample Js from the Jsize dimensional space with each J in range -1 to 1
+for taskid in ProgressBar(1:Nsamples)
+    Js = Js_all[taskid]
+    res = Run_LSWT(Js, B_same; dims=(1, 1, 1),Nk=Nk)
+    push!(results, (
+        copy(Js[[1, 2, 3, 5]]), # only keep J1, Δ, J1pmpm, J2
+        vec(res.data),
+        vec(res.disp),
+    ))
+end
 
-CSV.write("data/HaoResults/Hao_anisotropy_Js4_Bdep.csv", results)
+
+#CSV.write("data/HaoResults/Hao_anisotropy_Js4_Bdep_Nk100.csv", results)
+CSV.write("data/triangular_anisotropy_uniform_Js4_B50_Nk20.csv", results)
 
 # # read back the data
 # results = CSV.read("data/triangular_heisenberg_Js10_h20.csv", DataFrame)
