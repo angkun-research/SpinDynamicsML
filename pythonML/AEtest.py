@@ -61,6 +61,12 @@ X = (X - X_mean) / X_std
 print(X.max(), X.min())
 print(y.max(), y.min())
 
+# add random noise to X for data augmentation 
+NOISE_STD = 0.02 #0.01
+print(f"Adding Gaussian noise with std={NOISE_STD} to input features for data augmentation.")
+noise = np.random.normal(loc=0.0, scale=NOISE_STD, size=X.shape).astype(np.float32)
+X = X + noise
+
 # Convert to tensors and dataloaders
 X_t = torch.from_numpy(X)
 y_t = torch.from_numpy(y)
@@ -78,8 +84,9 @@ val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, drop_last=
 # --- Model ---
 input_dim = X.shape[1]
 relative_loss = False
-#print(X.shape)
-model = FCautoencoder(input_dim=input_dim, hidden_dim=1024, latent_dim=NumOfJ, relative_loss=relative_loss).to(DEVICE)
+hidden_dim = 256 #1024
+print(f"Hidden dimension: {hidden_dim}")
+model = FCautoencoder(input_dim=input_dim, hidden_dim=hidden_dim, latent_dim=NumOfJ, relative_loss=relative_loss).to(DEVICE)
 #model = ConvEncoder(input_dim=input_dim, hidden_dim=1024, latent_dim=3,kernel_size=3).to(DEVICE)
 #model = TransformerEncoder(input_dim=input_dim, hidden_dim=1024, latent_dim=3).to(DEVICE)
 #model = Conv1DEncoder(input_dim=input_dim,hidden_dim=64, latent_dim=NumOfJ, kernel_size=5,mag_recon_loss=mag_recon_loss).to(DEVICE)
@@ -97,15 +104,15 @@ for epoch in range(1, EPOCHS + 1):
     test(model, val_loader, cur_step=epoch, writer=None, device=DEVICE)
 
 #save checkpoint at only the final epoch
-torch.save({
-    "epoch": EPOCHS,
-    "model_state": model.state_dict(),
-    "optimizer_state": optimizer.state_dict(),
-    "X_mean": X_mean,
-    "X_std": X_std,
-}, os.path.join(MODEL_OUT, f"FCAE_anisotropy_LSWT_Js{NumOfJ}_epoch{EPOCHS}_N250000.pth"))
+# torch.save({
+#     "epoch": EPOCHS,
+#     "model_state": model.state_dict(),
+#     "optimizer_state": optimizer.state_dict(),
+#     "X_mean": X_mean,
+#     "X_std": X_std,
+# }, os.path.join(MODEL_OUT, f"FCAE_anisotropy_LSWT_Js{NumOfJ}_epoch{EPOCHS}_N250000.pth"))
 
-print("Training finished. Models saved to:", MODEL_OUT)
+# print("Training finished. Models saved to:", MODEL_OUT)
 
 
 # ---- Print a single test example: true Js vs predicted Js ----

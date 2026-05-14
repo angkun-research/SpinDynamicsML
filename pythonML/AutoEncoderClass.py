@@ -164,7 +164,7 @@ def train(model, dataloader, optimizer, prev_updates, writer=None,device='cpu'):
         target = target.to(device)
         optimizer.zero_grad()
         output = model(data, target, compute_loss=True)
-        loss = output.loss
+        loss = output.loss #output.relative_loss #output.loss
         loss.backward()
         if n_upd % 100 == 0:
             total_norm = 0.0
