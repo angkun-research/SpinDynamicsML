@@ -682,12 +682,13 @@ class Conv1DEncoder(nn.Module):
     
     def forward(self, x, y: Optional[torch.Tensor] = None, compute_loss: bool = True):
         # convert from (B, input_dim) to (B, in_channels, input_dim)
-        x_shape = x if x.dim() == 3 else x.view(x.size(0), 2, -1)
+        x_shape = x if x.dim() == 3 else x.view(x.size(0), self.in_channels, -1)
         
         # Initialize decoder on first forward pass
         if self.input_length is None:
             self.input_length = x_shape.size(2)
             self._build_decoder(self.input_length)
+            self.decoder = self.decoder.to(x_shape.device)
 
         # encode / decode
         z = self.encode(x_shape)

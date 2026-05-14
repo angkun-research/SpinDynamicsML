@@ -70,7 +70,7 @@ end
 # end
 
 Jsize = 4
-N_uniform = 50
+N_uniform = 10
 Nk=20
 Nsamples = 2*N_uniform^(Jsize-1)
 Js_all = Vector{Float64}[]
@@ -110,7 +110,7 @@ end
 
 
 #CSV.write("data/HaoResults/Hao_anisotropy_Js4_Bdep_Nk100.csv", results)
-CSV.write("data/triangular_anisotropy_uniform_Js4_B50_Nk20.csv", results)
+CSV.write("data/triangular_anisotropy_uniform_Js4_B50_Nk20_NJ$(N_uniform).csv", results)
 
 # # read back the data
 # results = CSV.read("data/triangular_heisenberg_Js10_h20.csv", DataFrame)

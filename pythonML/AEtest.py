@@ -38,6 +38,14 @@ df = pd.read_csv(CSV_PATH)
 for col in ['data', 'disp', 'Js']:
     df[col] = df[col].apply(json.loads)
 
+def normalize_to_unit_interval(values, eps=1e-8):
+    values = np.asarray(values, dtype=np.float32)
+    vmin = values.min()
+    vmax = values.max()
+    if vmax - vmin < eps:
+        return np.zeros_like(values, dtype=np.float32)
+    return 2.0 * (values - vmin) / (vmax - vmin) - 1.0
+
 # for col in ['disp', 'Js', 'IntSxx', 'IntSyy', 'IntSzz', 'IntSxy', 'IntSxz', 'IntSyz']:
 #      df[col] = df[col].apply(json.loads)
 
@@ -47,6 +55,13 @@ X = np.array([row['data'] + row['disp'] for _, row in df.iterrows()], dtype=np.f
 #X = np.array([row['data'] + row['disp'] + [float(row["B"])] for _, row in df.iterrows()], dtype=np.float32)
 #X = np.array([row['data'] + row['disp'] + [float(row["Bsat"])] for _, row in df.iterrows()], dtype=np.float32)
 #X = np.array([row['disp'] + row['IntSxx'] + row['IntSyy'] + row['IntSzz'] + row['IntSxy'] + row['IntSxz'] + row['IntSyz'] for _, row in df.iterrows()], dtype=np.float32)
+X = np.array([
+    np.concatenate([
+        normalize_to_unit_interval(row['data']),
+        normalize_to_unit_interval(row['disp']),
+    ])
+    for _, row in df.iterrows()
+], dtype=np.float32)
 
 #y = df[['J1', 'J2', 'J3']].values.astype(np.float32)
 y = np.array(df['Js'].tolist(), dtype=np.float32)
