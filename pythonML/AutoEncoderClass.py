@@ -609,7 +609,7 @@ class Conv1DEncoder(nn.Module):
     """
     Convolutional Autoencoder (supervised latent) class.
     """
-    def __init__(self,in_channels=1, hidden_dim=128,latent_dim=3, 
+    def __init__(self,input_length, in_channels=1, hidden_dim=128,latent_dim=3, 
                  kernel_size=3,mag_recon_loss=1.0,relative_loss=False, ifdecode=False):
         super(Conv1DEncoder, self).__init__()
         self.latent_dim = latent_dim
@@ -619,7 +619,7 @@ class Conv1DEncoder(nn.Module):
         self.in_channels = in_channels
         self.hidden_dim = hidden_dim
         self.ifdecode = ifdecode
-        self.input_length = None # Will be built on first forward pass
+        self.input_length = input_length
         self.decoder = None  # Will be built on first forward pass
     
         pad = (kernel_size-1) // 2
@@ -630,17 +630,50 @@ class Conv1DEncoder(nn.Module):
         self.k1, self.k2 = k1, k2
         self.p1, self.p2 = p1, p2
         
-        self.encoder = nn.Sequential(
+        # self.encoder = nn.Sequential(
+        #     nn.Conv1d(in_channels, hidden_dim, kernel_size=k1,padding=p1,padding_mode='circular'),  # periodic padding to avoid edge effects
+        #     nn.SiLU(),# Swish activation function
+        #     nn.Conv1d(hidden_dim, hidden_dim, kernel_size=k2, padding=p2,padding_mode='circular'),    # second conv: k=3
+        #     nn.SiLU(),
+        #     nn.AdaptiveAvgPool1d(1),  # Ensure fixed output, shape (B, hidden_dim, 1)
+        #     nn.Flatten(),  # Flatten back to 1D
+        #     nn.Linear(hidden_dim, hidden_dim//2),  # Adjust dimensions for Conv2d output
+        #     nn.SiLU(),
+        #     nn.Linear(hidden_dim//2, latent_dim),
+        #     nn.Tanh(),  # constrain latent space to [-1,1]
+        # )
+
+        self.encoder_conv = nn.Sequential(
             nn.Conv1d(in_channels, hidden_dim, kernel_size=k1,padding=p1,padding_mode='circular'),  # periodic padding to avoid edge effects
             nn.SiLU(),# Swish activation function
+            nn.AvgPool1d(kernel_size=2, stride=2),   # L -> L/2
             nn.Conv1d(hidden_dim, hidden_dim, kernel_size=k2, padding=p2,padding_mode='circular'),    # second conv: k=3
             nn.SiLU(),
-            nn.AdaptiveAvgPool1d(1),  # Ensure fixed output, shape (B, hidden_dim, 1)
-            nn.Flatten(),  # Flatten back to 1D
-            nn.Linear(hidden_dim, hidden_dim//2),  # Adjust dimensions for Conv2d output
+            nn.AvgPool1d(kernel_size=2, stride=2),   # L -> L/2
+        )
+        
+        with torch.no_grad():
+            dummy = torch.zeros(1, in_channels, input_length)
+            pooled = self.encoder_conv(dummy)
+            self.pooled_length = pooled.shape[-1]
+
+        self.encoder_head = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(hidden_dim * self.pooled_length, hidden_dim // 2),
             nn.SiLU(),
-            nn.Linear(hidden_dim//2, latent_dim),
-            nn.Tanh(),  # constrain latent space to [-1,1]
+            nn.Linear(hidden_dim // 2, latent_dim),
+            nn.Tanh(),
+        )
+
+        self.decoder = nn.Sequential(
+            nn.Linear(latent_dim, hidden_dim // 2),
+            nn.SiLU(),
+            nn.Linear(hidden_dim // 2, hidden_dim * self.pooled_length),
+            nn.SiLU(),
+            nn.Unflatten(1, (hidden_dim, self.pooled_length)),
+            nn.ConvTranspose1d(hidden_dim, hidden_dim, kernel_size=2, stride=2),
+            nn.SiLU(),
+            nn.ConvTranspose1d(hidden_dim, in_channels, kernel_size=2, stride=2),
         )
 
     def _build_decoder(self, input_length):
@@ -666,7 +699,9 @@ class Conv1DEncoder(nn.Module):
             torch.Tensor: Encoded data in the latent space
         """
         #print("Encoded x shape:", x.shape)
-        z = self.encoder(x)
+        #z = self.encoder(x)
+        features = self.encoder_conv(x)
+        z = self.encoder_head(features)
         return z
 
     def decode(self, z):
@@ -685,10 +720,12 @@ class Conv1DEncoder(nn.Module):
         x_shape = x if x.dim() == 3 else x.view(x.size(0), self.in_channels, -1)
         
         # Initialize decoder on first forward pass
-        if self.input_length is None:
-            self.input_length = x_shape.size(2)
-            self._build_decoder(self.input_length)
-            self.decoder = self.decoder.to(x_shape.device)
+        # if self.input_length is None:
+        #     self.input_length = x_shape.size(2)
+        #     self._build_decoder(self.input_length)
+        #     self._build_heads(self.input_length)
+        #     self.decoder = self.decoder.to(x_shape.device)
+        #     self.encoder_head = self.encoder_head.to(x_shape.device)
 
         # encode / decode
         z = self.encode(x_shape)
