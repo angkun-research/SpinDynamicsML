@@ -100,6 +100,12 @@ def add_componentwise_noise(X, sigma, component_std, seed=1234):
     eps = rng.normal(0.0, sigma, size=X.shape).astype(np.float32)
     return X + eps * component_std
 
+def add_bandwidth_noise(X, sigma, seed=1234):
+    rng = np.random.default_rng(seed)
+    eps = rng.normal(0.0, 1.0, size=X.shape).astype(np.float32)
+    bandwidth = X.max(axis=2, keepdims=True) - X.min(axis=2, keepdims=True)
+    return X + sigma * bandwidth * eps
+
 def make_dataset(X, y):
     X_t = torch.from_numpy(X.astype(np.float32))
     y_t = torch.from_numpy(y.astype(np.float32))
