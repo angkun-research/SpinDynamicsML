@@ -120,6 +120,10 @@ All Julia examples use the `Sunny` package. Common patterns:
 - The `Conv1DEncoder` class has both an old (commented out) and new implementation — the new one uses lazy decoder initialization via `pooled_length`.
 - There are two overlapping `run_experiment` function definitions in `Regression_noise_test.py` — the second one (line 200) is the active version.
 
+## Noise Injection
+
+`Regression_noise_test.py` supports two noise methods. `add_componentwise_noise` adds Gaussian noise scaled by per-component standard deviation: `x_j → x_j + σ · N(0,1) · std(x_j)`. `add_bandwidth_noise` scales noise by the per-channel signal range: `x_j → x_j + σ · (max_c(x_j) − min_c(x_j)) · N(0,1)`, where the bandwidth is computed independently for each input channel (dispersion and intensity) across the sequence dimension — modeling experimental broadening where larger signal features tolerate proportionally larger noise.
+
 ## Noise Test Results
 
 ### mlp
