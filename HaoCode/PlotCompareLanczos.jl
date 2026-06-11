@@ -47,34 +47,34 @@ for sample_idx in 1:nsample
 end
 
 
-using CairoMakie
-# Visualization
-hs = [i/12 for i in 0:12]
-with_theme(theme_latexfonts()) do
-    fig = Figure(size=(1200, 600))
-    ax  = Axis(fig[1,1]; xlabel=L"(H,H,0)", ylabel="Energy (meV)", title="True value", xlabelsize=30, ylabelsize=30, titlesize=30, xticklabelsize=25, yticklabelsize=25)
-    heatmap!(ax, hs, energies, res[:,:,1]; colormap=:viridis, colorrange=(0, 2.5))
-    text!(ax, 0.05, 15, text="J1, Δ, J1pmpm, J1zpm, J2 = $(round.(Js[:,1], digits=3))", align = (:left, :top), fontsize=16, color=:white)
-    text!(ax, 0.05, 13, text="B = $(round(Bs[1], digits=3)) T", align = (:left, :top), fontsize=16, color=:white)
-    ylims!(ax, 0, 20)
-    ax  = Axis(fig[1,2]; xlabel=L"(H,H,0)", ylabel="Energy (meV)", title="Predicted value", xlabelsize=30, ylabelsize=30, titlesize=30, xticklabelsize=25, yticklabelsize=25)
-    heatmap!(ax, hs, energies, res[:,:,2]; colormap=:viridis, colorrange=(0, 2.5))
-    text!(ax, 0.05, 15, text="J1, Δ, J1pmpm, J1zpm, J2 = $(round.(Js[:,2], digits=3))", align = (:left, :top), fontsize=16, color=:white)
-    text!(ax, 0.05, 13, text="B = $(round(Bs[2], digits=3)) T", align = (:left, :top), fontsize=16, color=:white)
-    ylims!(ax, 0, 20)
-    fig
-    save("../Desktop/fig1.pdf", fig) # save figure
-end
+# using CairoMakie
+# # Visualization
+# hs = [i/12 for i in 0:12]
+# with_theme(theme_latexfonts()) do
+#     fig = Figure(size=(1200, 600))
+#     ax  = Axis(fig[1,1]; xlabel=L"(H,H,0)", ylabel="Energy (meV)", title="True value", xlabelsize=30, ylabelsize=30, titlesize=30, xticklabelsize=25, yticklabelsize=25)
+#     heatmap!(ax, hs, energies, res[:,:,1]; colormap=:viridis, colorrange=(0, 2.5))
+#     text!(ax, 0.05, 15, text="J1, Δ, J1pmpm, J1zpm, J2 = $(round.(Js[:,1], digits=3))", align = (:left, :top), fontsize=16, color=:white)
+#     text!(ax, 0.05, 13, text="B = $(round(Bs[1], digits=3)) T", align = (:left, :top), fontsize=16, color=:white)
+#     ylims!(ax, 0, 20)
+#     ax  = Axis(fig[1,2]; xlabel=L"(H,H,0)", ylabel="Energy (meV)", title="Predicted value", xlabelsize=30, ylabelsize=30, titlesize=30, xticklabelsize=25, yticklabelsize=25)
+#     heatmap!(ax, hs, energies, res[:,:,2]; colormap=:viridis, colorrange=(0, 2.5))
+#     text!(ax, 0.05, 15, text="J1, Δ, J1pmpm, J1zpm, J2 = $(round.(Js[:,2], digits=3))", align = (:left, :top), fontsize=16, color=:white)
+#     text!(ax, 0.05, 13, text="B = $(round(Bs[2], digits=3)) T", align = (:left, :top), fontsize=16, color=:white)
+#     ylims!(ax, 0, 20)
+#     fig
+#     save("../Desktop/fig1.pdf", fig) # save figure
+# end
 
-with_theme(theme_latexfonts()) do
-    fig = Figure(size=(600, 600))
-    ax2 = Axis(fig[1,1]; xlabel="Energy (meV)", ylabel="Intensity", title="True value", xlabelsize=30, ylabelsize=30, titlesize=30, xticklabelsize=25, yticklabelsize=25)
-    lines!(ax2, energies, res[1, :, 1], label=L"\Gamma, \mathrm{true}", color=:blue)
-    lines!(ax2, energies, res[1, :, 2], label=L"\Gamma, \mathrm{predicted}", color=:blue, linestyle=:dash,linewidth=3)
-    lines!(ax2, energies, res[6, :, 1], label=L"M, \mathrm{true}", color=:red)
-    lines!(ax2, energies, res[6, :, 2], label=L"M, \mathrm{predicted}", color=:red, linestyle=:dash,linewidth=3)
-    axislegend(ax2; labelsize=18)
-    xlims!(ax2, 0, 20)
-    fig
-    save("../Desktop/fig2.pdf", fig) # save figure
-end
+# with_theme(theme_latexfonts()) do
+#     fig = Figure(size=(600, 600))
+#     ax2 = Axis(fig[1,1]; xlabel="Energy (meV)", ylabel="Intensity", title="True value", xlabelsize=30, ylabelsize=30, titlesize=30, xticklabelsize=25, yticklabelsize=25)
+#     lines!(ax2, energies, res[1, :, 1], label=L"\Gamma, \mathrm{true}", color=:blue)
+#     lines!(ax2, energies, res[1, :, 2], label=L"\Gamma, \mathrm{predicted}", color=:blue, linestyle=:dash,linewidth=3)
+#     lines!(ax2, energies, res[6, :, 1], label=L"M, \mathrm{true}", color=:red)
+#     lines!(ax2, energies, res[6, :, 2], label=L"M, \mathrm{predicted}", color=:red, linestyle=:dash,linewidth=3)
+#     axislegend(ax2; labelsize=18)
+#     xlims!(ax2, 0, 20)
+#     fig
+#     save("../Desktop/fig2.pdf", fig) # save figure
+# end
