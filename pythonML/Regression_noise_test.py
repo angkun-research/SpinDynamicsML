@@ -100,10 +100,15 @@ def add_componentwise_noise(X, sigma, component_std, seed=1234):
     eps = rng.normal(0.0, sigma, size=X.shape).astype(np.float32)
     return X + eps * component_std
 
-def add_bandwidth_noise(X, sigma, seed=1234):
+def add_bandwidth_noise(X, sigma, seed=1234, intensity_channel=1):
     rng = np.random.default_rng(seed)
     eps = rng.normal(0.0, 1.0, size=X.shape).astype(np.float32)
-    bandwidth = X.max(axis=2, keepdims=True) - X.min(axis=2, keepdims=True)
+    max_vals = X.max(axis=2, keepdims=True)
+    min_vals = X.min(axis=2, keepdims=True)
+    # default: bandwidth = max - min (used for dispersion)
+    bandwidth = max_vals - min_vals
+    # for intensity channel use max only (min is effectively 0)
+    bandwidth[:, intensity_channel:intensity_channel+1, :] = max_vals[:, intensity_channel:intensity_channel+1, :]
     return X + sigma * bandwidth * eps
 
 def make_dataset(X, y):

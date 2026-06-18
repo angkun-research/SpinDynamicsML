@@ -70,8 +70,8 @@ end
 # end
 
 Jsize = 4
-N_uniform = 10
-Nk=20
+N_uniform = 30
+Nk = 1000
 Nsamples = 2*N_uniform^(Jsize-1)
 Js_all = Vector{Float64}[]
 for J10 in [-1,1]
@@ -94,7 +94,7 @@ for J10 in [-1,1]
         end
     end
 end
-B_same = 50
+B_same = 60
 results = DataFrame(Js=Vector{Float64}[], data=Vector{Float64}[], disp=Vector{Float64}[])
 
 # Uniformly sample Js from the Jsize dimensional space with each J in range -1 to 1
@@ -110,7 +110,8 @@ end
 
 
 #CSV.write("data/HaoResults/Hao_anisotropy_Js4_Bdep_Nk100.csv", results)
-CSV.write("data/triangular_anisotropy_uniform_Js4_B50_Nk20_NJ$(N_uniform).csv", results)
+CSV.write("data/triangular_anisotropy_uniform_Js4_B$(B_same)_Nk$(Nk)_NJ$(N_uniform).csv", results)
+println("saved results to data/triangular_anisotropy_uniform_Js4_B$(B_same)_Nk$(Nk)_NJ$(N_uniform).csv")
 
 # # read back the data
 # results = CSV.read("data/triangular_heisenberg_Js10_h20.csv", DataFrame)
