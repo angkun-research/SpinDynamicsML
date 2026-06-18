@@ -11,7 +11,7 @@ class RegressionOutput:
     loss: Optional[torch.Tensor] = None
 
 
-def train(model, dataloader, optimizer, prev_updates, writer=None, device='cpu'):
+def train(model, dataloader, optimizer, prev_updates, writer=None, twoheads=False, device='cpu'):
     model.train()
     running_loss = 0.0
     running_relative_loss = 0.0
@@ -23,10 +23,27 @@ def train(model, dataloader, optimizer, prev_updates, writer=None, device='cpu')
         target = target.to(device)
 
         optimizer.zero_grad()
-        pred = model(data)
-        loss = F.mse_loss(pred, target, reduction='mean')
-        relative_loss = (pred - target).abs() / (target.abs() + 1e-12)
-        relative_loss = relative_loss.mean()
+        if not twoheads:
+            pred = model(data)
+            loss = F.mse_loss(pred, target, reduction='mean')
+            relative_loss = (pred - target).abs() / (target.abs() + 1e-12)
+            relative_loss = relative_loss.mean()
+        else:
+            cls_logits, reg_pred = model(data)
+            y_cls = target[:, 0]
+            y_cls = ((y_cls + 1) / 2).long()   # -1/+1 -> 0/1
+            y_reg = target[:, 1:]
+            loss_cls = F.cross_entropy(cls_logits, y_cls) # implicitly applies softmax to cls_logits
+            loss_reg = F.mse_loss(reg_pred, y_reg, reduction='mean')
+            loss = loss_cls + loss_reg
+            # Keep relative error comparable to your old code:
+            # classification is compared as -1/+1 prediction, regression as raw values
+            cls_pred01 = torch.argmax(cls_logits, dim=1)
+            cls_pred_pm1 = 2 * cls_pred01 - 1
+            pred_full = torch.cat([cls_pred_pm1.unsqueeze(1).float(), reg_pred], dim=1)
+            relative_loss = (pred_full - target).abs() / (target.abs() + 1e-12)
+            relative_loss = relative_loss.mean()
+
         loss.backward()
         #torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0) # gradient clipping to prevent exploding gradients
         optimizer.step()
@@ -44,7 +61,7 @@ def train(model, dataloader, optimizer, prev_updates, writer=None, device='cpu')
     return prev_updates + len(dataloader)
 
 
-def test(model, dataloader, cur_step, writer=None, device='cpu'):
+def test(model, dataloader, cur_step, writer=None, twoheads=False, device='cpu'):
     model.eval()
     running_loss = 0.0
     running_relative_loss = 0.0
@@ -54,10 +71,25 @@ def test(model, dataloader, cur_step, writer=None, device='cpu'):
         for data, target in tqdm(dataloader, desc='Testing'):
             data = data.to(device)
             target = target.to(device)
-            pred = model(data)
-            loss = F.mse_loss(pred, target, reduction='mean')
-            relative_loss = (pred - target).abs() / (target.abs() + 1e-12)
-            relative_loss = relative_loss.mean()
+            if not twoheads:
+                pred = model(data)
+                loss = F.mse_loss(pred, target, reduction='mean')
+                relative_loss = (pred - target).abs() / (target.abs() + 1e-12)
+                relative_loss = relative_loss.mean()
+            else:
+                cls_logits, reg_pred = model(data)
+                y_cls = target[:, 0]
+                y_cls = ((y_cls + 1) / 2).long()   # -1/+1 -> 0/1
+                y_reg = target[:, 1:]
+                loss_cls = F.cross_entropy(cls_logits, y_cls) # implicitly applies softmax to cls_logits
+                loss_reg = F.mse_loss(reg_pred, y_reg, reduction='mean')
+                loss = loss_cls + loss_reg
+                cls_pred01 = torch.argmax(cls_logits, dim=1)
+                cls_pred_pm1 = 2 * cls_pred01 - 1
+                pred_full = torch.cat([cls_pred_pm1.unsqueeze(1).float(), reg_pred], dim=1)
+                relative_loss = (pred_full - target).abs() / (target.abs() + 1e-12)
+                relative_loss = relative_loss.mean()
+            
             running_loss += loss.item()*data.size(0)
             running_relative_loss += relative_loss.item()*data.size(0)
             number_of_samples += data.size(0)
@@ -144,6 +176,37 @@ class ConvType3(nn.Module):
         x = self.net(x)
         #x = torch.tanh(x.pow(3))  # constrain outputs to [-1, 1]
         return x
+
+class ConvType4(nn.Module):
+    def __init__(self, in_channels, input_length, hidden_dim=256, output_dim=4,kernel_size=3):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Conv1d(in_channels, hidden_dim, kernel_size=kernel_size,padding=kernel_size//2,padding_mode='circular'), 
+            nn.SiLU(),
+            nn.MaxPool1d(kernel_size=2, stride=2),
+            nn.Conv1d(hidden_dim, hidden_dim, kernel_size=kernel_size,padding=kernel_size//2,padding_mode='circular'), 
+            nn.SiLU(),
+            nn.MaxPool1d(kernel_size=2, stride=2),
+            nn.Conv1d(hidden_dim, hidden_dim, kernel_size=kernel_size,padding=kernel_size//2,padding_mode='circular'),
+            nn.SiLU(),
+            nn.MaxPool1d(kernel_size=2, stride=2),
+            nn.Flatten(),  # flatten before the final linear layer
+            nn.Linear(hidden_dim * (input_length // 8), hidden_dim), # adjust input size for linear
+            nn.SiLU(),
+            # +1 output: first 2 for classification logits (class 0/1), remaining (output_dim - 1) for regression
+            nn.Linear(hidden_dim, output_dim + 1)
+        )
+    def forward(self, x):
+        x = self.net(x)                    # shape: [B, output_dim + 1]
+
+        cls_logits = x[:, :2]            # class 0/1 logits
+        reg_out = x[:, 2:]               # shape: [B, output_dim - 1]
+    
+        #cls_probs = torch.softmax(cls_logits, dim=1)
+        #cls_out = torch.argmax(cls_probs, dim=1)  # predicted class labels (0 or 1)
+        #cls_out = 2*cls_out - 1  # convert to -1 or +1
+        #final_out = torch.cat([cls_out.unsqueeze(1).float(), reg_out], dim=1)  # shape: [B, output_dim]
+        return cls_logits, reg_out
 
 
 class TransformerType1(nn.Module):

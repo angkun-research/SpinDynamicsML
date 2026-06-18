@@ -7,7 +7,7 @@ from torch.utils.data import TensorDataset, DataLoader
 from utils import pick_best_device
 
 from NeuralNetworkClass import RegressionMLP, train, test
-from NeuralNetworkClass import ConvType1, ConvType2, ConvType3
+from NeuralNetworkClass import ConvType1, ConvType2, ConvType3, ConvType4
 from NeuralNetworkClass import TransformerType1, ConvTransformer
 
 CSV_PATH = './data/triangular_anisotropy_uniform_Js4_B50_Nk20.csv'
