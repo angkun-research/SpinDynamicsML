@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Constraints
 
-- **Only modify files under `HPCtemp/`. Never write, edit, or create files anywhere else.**
+- **Code changes only under `HPCtemp/`. Documentation can be written outside it** (this file, analysis notes, methodology records).
 - When running Python, always activate the project venv first: `source .venv/bin/activate`
 
 ## Project Overview
@@ -136,4 +136,105 @@ All Julia examples use the `Sunny` package. Common patterns:
 | noisy | 0.02 | 5.499984e-04 | 5.285325e-02 | noisy | 5.409429e-04 | 5.238613e-02 |
 | noisy | 0.03 | 1.117588e-03 | 7.341692e-02 | clean | 7.683837e-05 | 1.683364e-02 |
 | noisy | 0.03 | 1.117588e-03 | 7.341692e-02 | noisy | 1.092549e-03 | 7.273339e-02 |
+
+
+## Inverse Problem Identifiability: FIM Analysis
+
+This section documents the Fisher Information Matrix (FIM) framework for rigorously assessing whether the inverse Hamiltonian problem is theoretically solvable — i.e., whether observables uniquely determine parameters.
+
+### Forward Map Definition
+
+For a given Hamiltonian J ∈ R^d, the observable vector at q-point q is:
+
+```
+S(q,J) = (dispersions ω₁(q,J), ..., ω_N(q,J); intensities I₁(q,J), ..., I_N(q,J)) ∈ R^{2N}
+```
+
+The full observable across M sampled q-points:
+
+```
+S(J) = [S(q₁,J); S(q₂,J); ... ; S(q_M,J)]  ∈ R^{M·2N}
+```
+
+For the triangular Heisenberg (3-J): d=3, M varies with dataset.
+For anisotropic (4-J): d=4, M = q-point count.
+For anisotropic (8-J): d=8, M = q-point count.
+
+### Fisher Information Matrix
+
+Assuming additive Gaussian noise ε ~ N(0, Σ) on measurements:
+
+```
+log p(y|J) = -½ · (y - S(J))ᵀ Σ⁻¹ (y - S(J)) + const
+
+F_{ij}(J) = [∂S/∂J_i]ᵀ W [∂S/∂J_j]   where  W = Σ⁻¹
+```
+
+In compact form:
+
+```
+F(J) = J_S(J)ᵀ W J_S(J)     ∈ R^{d×d}
+```
+
+where `J_S(J)` is the forward Jacobian (M·2N rows × d columns):
+
+```
+        [ ∂S/∂J₁   ∂S/∂J₂   ...   ∂S/∂J_d ]
+  J_S =  (M·2N × d matrix)
+```
+
+Each column i is the sensitivity vector: how every observable changes when parameter J_i varies. Parallel columns → parameters that trade off against each other indistinguishably.
+
+### Condition Number
+
+```
+κ(F) = λ_max(F) / λ_min(F)
+```
+
+where λ are eigenvalues sorted largest to smallest. Interpretation: orders of magnitude separating the best-identified direction from the worst. κ ≈ 10³ → some parameters at ~10% precision while others at ~0.1%. κ ≈ 10¹⁶ → practically unidentifiable.
+
+**Report full eigenvalue spectrum, not just κ.** A gap between λ_k and λ_{k+1} reveals exactly how many directions are constrained. κ hides this by conflating a small gap near zero with one extreme outlier.
+
+### Gradient Computation via Central Finite Differences
+
+Per parameter at location J:
+
+```
+∂S/∂J_i ≈ [S(J + δ·e_i) - S(J - δ·e_i)] / (2δ)
+```
+
+where e_i is unit vector in direction i, **δ = 10⁻³ to 10⁻⁴** relative to parameter range [-1, 1]. This gives O(δ²) ≈ 10⁻⁸–10⁻¹⁰ accuracy — far below LSWT numerical noise.
+
+Cost per J location: **2d forward LSWT evaluations**. For d=8: 16 Sunny/LSWT calls (~milliseconds each). Total for M q-points: ~3000 LSWT calls per J point.
+
+### Concrete Recipe (for manuscript)
+
+For each problem type (3J, 4J-anisotropy, 8J-anisotropy):
+
+1. **Pick 15–20 random J locations** across [-1,1]^d (uniform sampling covering entire parameter space).
+
+2. **At each location:**
+   a. Compute Jacobian J_S by central finite differences (δ = 10⁻³)
+      — forward pass at J+δe_i and J-δe_i for each i=1..d
+   b. Form F = J_SᵀJ_S  (equal weight / unit noise assumed)
+   c. Compute eigenvalues λ₁ ≥ λ₂ ≥ ... ≥ λ_d
+
+3. **Report:**
+   - Eigenvalue spectrum (log-scale plot) per problem type — primary result
+   - κ(F) at each location, median/interquartiles across locations
+   - Fraction of near-zero eigenvalues (< 10⁻⁶ relative to λ₁) — quantifies identifiability failures
+
+4. **Cross-check with forward injectivity scan** (detects global degeneracies FIM misses):
+   - 10⁵ random pairs (J_a, J_b), histogram ||S(J_a) - S(J_b)||₂
+   - Report fraction below your FIM resolution floor — catches maps that are locally injective but globally many-to-one
+
+### When Zero Eigenvalues Appear
+
+- **Single zero column in J_S:** parameter unobservable at this specific J point. Could be symmetry/accident at one location, not global.
+- **Full rank everywhere tested:** problem is "generically identifiable" with degeneracy loci (measure-zero exception set). Strong result.
+- **Zero eigenvalue at most tested locations:** structural non-invertibility — the forward map genuinely collapses multiple J onto same SSF.
+
+### Implementation Location
+
+All FIM analysis code goes in `HPCtemp/` per project constraints. Suggested file: `HPCtemp/FIM_identifiability.jl` (Julia, using Sunny for forward passes) or `HPCtemp/fim_analysis.py` (Python wrapper around Julia calls).
 
