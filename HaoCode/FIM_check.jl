@@ -17,7 +17,7 @@ function polarize_system!(sys)
     end
 end
 
-function Run_LSWT(Js,B; dims = (1,1,1),Nk=12)
+function Run_LSWT(Js,B; dims = (1,1,1),Nk=12, observable=:perp)
     J1, Δ, Jpmpm, Jzpm, J2 = Js
     units = Units(:meV, :angstrom)
     a = 4.1149
@@ -39,28 +39,61 @@ function Run_LSWT(Js,B; dims = (1,1,1),Nk=12)
     set_exchange!(sys, J2, Bond(1, 1, [1, 2, 0]))
     set_field!(sys, [B, 0, 0] * units.T)
 
-    #swt = SpinWaveTheory(sys; measure=ssf_perp(sys))
-
-    # randomize_spins!(sys)
-    # minimize_energy!(sys)
     polarize_system!(sys)
 
-    swt = SpinWaveTheory(sys; measure=ssf_perp(sys))
+    measure = if observable == :perp
+        ssf_perp(sys)
+    elseif observable == :tensor
+        ssf_custom((q, ssf) -> ssf, sys)
+    else
+        error("Unknown observable=$(observable). Use :perp or :tensor")
+    end
+
+    swt = SpinWaveTheory(sys; measure=measure)
     res = intensities_bands(swt, path)
 
-    #plot_intensities(res; units, title="Triangular Lattice")
     return res
 end
 
+function flatten_tensor_data(res; tensor_components=:sym6)
+    if tensor_components == :sym6
+        sxx = real.(getindex.(res.data[1, :], 1, 1))
+        syy = real.(getindex.(res.data[1, :], 2, 2))
+        szz = real.(getindex.(res.data[1, :], 3, 3))
+        sxy = real.(getindex.(res.data[1, :], 1, 2))
+        sxz = real.(getindex.(res.data[1, :], 1, 3))
+        syz = real.(getindex.(res.data[1, :], 2, 3))
+        return vcat(sxx, syy, szz, sxy, sxz, syz)
+    elseif tensor_components == :full9
+        nq = size(res.data, 2)
+        out = Vector{Float64}(undef, 9 * nq)
+        k = 1
+        for iq in 1:nq
+            M = res.data[1, iq]
+            for a in 1:3, b in 1:3
+                out[k] = real(M[a, b])
+                k += 1
+            end
+        end
+        return out
+    else
+        error("Unknown tensor_components=$(tensor_components). Use :sym6 or :full9")
+    end
+end
+
 # Build the observable vector S(J): concatenation of dispersion then intensity
-function S_vec(Js; B=60, Nk=1000, dims=(1,1,1))
+function S_vec(Js; B=60, Nk=1000, dims=(1,1,1), observable=:perp, tensor_components=:sym6)
     d = length(Js)
     if d == 4
         Js = vcat(Js[1:3], 0.0, Js[4])  # insert Jzpm=0 for 4-parameter case
     end
-    res = Run_LSWT(Js, B; dims=dims, Nk=Nk)
+    res = Run_LSWT(Js, B; dims=dims, Nk=Nk, observable=observable)
     dvec = vec(res.disp)
-    idvec = vec(res.data)
+    idvec = if observable == :perp
+        vec(res.data)
+    else
+        flatten_tensor_data(res; tensor_components=tensor_components)
+    end
     return vcat(dvec, idvec)
 end
 
@@ -77,9 +110,9 @@ Options:
 - `sigma`: optional vector of length m providing measurement std; if provided rows of J_S are divided by sigma (whitening).
 - `check_steps`: list of δ multipliers to test convergence (optional).
 """
-function compute_FIM(Js0; δ=1e-3, B=60, Nk=1000, dims=(1,1,1), sigma=nothing)
+function compute_FIM(Js0; δ=1e-3, B=60, Nk=1000, dims=(1,1,1), sigma=nothing, observable=:perp, tensor_components=:sym6)
     d = length(Js0)
-    S0 = S_vec(Js0; B=B, Nk=Nk, dims=dims)
+    S0 = S_vec(Js0; B=B, Nk=Nk, dims=dims, observable=observable, tensor_components=tensor_components)
     m = length(S0)
     J_S = zeros(Float64, m, d)
 
@@ -87,8 +120,8 @@ function compute_FIM(Js0; δ=1e-3, B=60, Nk=1000, dims=(1,1,1), sigma=nothing)
     for i in 1:d
         step = δ * max(abs(Js0[i]), 1.0)
         dp = zeros(d); dp[i] = step
-        Sp = S_vec(Js0 .+ dp; B=B, Nk=Nk, dims=dims)
-        Sm = S_vec(Js0 .- dp; B=B, Nk=Nk, dims=dims)
+        Sp = S_vec(Js0 .+ dp; B=B, Nk=Nk, dims=dims, observable=observable, tensor_components=tensor_components)
+        Sm = S_vec(Js0 .- dp; B=B, Nk=Nk, dims=dims, observable=observable, tensor_components=tensor_components)
         J_S[:, i] = (Sp .- Sm) ./ (2 * step)
     end
 
@@ -120,19 +153,21 @@ function compute_FIM(Js0; δ=1e-3, B=60, Nk=1000, dims=(1,1,1), sigma=nothing)
         :min_eval => evals[end],
         :max_eval => evals[1],
         :m => m,
-        :d => d
+        :d => d,
+        :observable => observable,
+        :tensor_components => tensor_components
     )
 
     return (F=F, evals=evals, evecs=evecs, J_S=J_S, info=info)
 end
 
 # Optional helper: convergence check over multiple δ values (prints relative changes)
-function delta_convergence(Js0; deltas=[1e-2,1e-3,1e-4], B=60, Nk=200, dims=(1,1,1))
+function delta_convergence(Js0; deltas=[1e-2,1e-3,1e-4], B=60, Nk=200, dims=(1,1,1), observable=:perp, tensor_components=:sym6)
     println("Running δ-convergence for: ", deltas)
     results = Dict()
     prev_JS = nothing
     for δ in deltas
-        res = compute_FIM(Js0; δ=δ, B=B, Nk=Nk, dims=dims)
+        res = compute_FIM(Js0; δ=δ, B=B, Nk=Nk, dims=dims, observable=observable, tensor_components=tensor_components)
         results[δ] = res
         if prev_JS !== nothing
             # compare columns
@@ -150,7 +185,9 @@ println("FIM_identifiability.jl — example run")
 J0 = [1.0, 0.9, 0.1, 0.0, 0.2]   # length d must match your Run_LSWT expectation slice
 J0 = [1.0, 0.9, 0.1, 0.2]
 println("Computing FIM at J0 = ", J0)
-res = compute_FIM(J0; δ=1e-3, B=60, Nk=200)
+observable = :tensor #:perp
+tensor_components = :sym6
+res = compute_FIM(J0; δ=1e-3, B=60, Nk=200, observable=observable, tensor_components=tensor_components)
 println("Eigenvalues (desc): ", res.evals)
 println("Condition est: ", res.info[:cond])
 
@@ -163,12 +200,12 @@ J0s = [
 ]
 for J0 in J0s
     println("\nComputing FIM at J0 = ", J0)
-    res = compute_FIM(J0; δ=1e-3, B=60, Nk=200)
+    local res = compute_FIM(J0; δ=1e-3, B=60, Nk=200, observable=observable, tensor_components=tensor_components)
     println("Eigenvalues (desc): ", res.evals)
     println("Condition est: ", res.info[:cond])
     J04 = J0[[1,2,3,5]]  # drop Jzpm for 4-parameter case
     println("\nComputing FIM at 4-parameter J0 = ", J04)
-    res4 = compute_FIM(J04; δ=1e-3, B=60, Nk=200)
+    local res4 = compute_FIM(J04; δ=1e-3, B=60, Nk=200, observable=observable, tensor_components=tensor_components)
     println("Eigenvalues (desc): ", res4.evals)
     println("Condition est: ", res4.info[:cond])
 end
