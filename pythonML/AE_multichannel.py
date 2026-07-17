@@ -4,7 +4,6 @@ import torch
 from torch.utils.data import TensorDataset, DataLoader
 import numpy as np
 
-# import model + train/test helpers from your module
 #from pythonML.AutoEncoderClass import FCautoencoder, train, test
 from AutoEncoderClass import FCBsatDecoder, FCautoencoder, train, test
 from AutoEncoderClass import Conv1DEncoder
@@ -74,6 +73,15 @@ X = (X - X_mean) / X_std
 print(X.max(), X.min())
 print(y.max(), y.min())
 
+# For fully connected autoencoder
+# X = np.concatenate([disp, inten], axis=1)  # (N, 2*L)
+# X_mean = X.mean(axis=0, keepdims=True)   # (1, 2, 1)
+# print("shape of X_mean:", X_mean.shape)
+# X_std = X.std(axis=0, keepdims=True) + 1e-8
+# X = (X - X_mean) / X_std
+# print(X.max(), X.min())
+# print(y.max(), y.min())
+
 # Convert to tensors and dataloaders
 X_t = torch.from_numpy(X)
 y_t = torch.from_numpy(y)
@@ -95,7 +103,6 @@ in_channels = X.shape[1]  # number of channels for Conv1DEncoder
 #print(X.shape)
 #model = FCautoencoder(input_dim=input_dim, hidden_dim=1024, latent_dim=NumOfJ, relative_loss=relative_loss).to(DEVICE)
 model = Conv1DEncoder(in_channels=in_channels, hidden_dim=64, latent_dim=NumOfJ, kernel_size=5,mag_recon_loss=mag_recon_loss).to(DEVICE)
-
 
 optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=DW)
 # print number of parameters
