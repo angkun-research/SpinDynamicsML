@@ -7,6 +7,7 @@ authors = ["angkunwu <gilbert.wu14@gmail.com>"]
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
+LaTeXStrings = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 ProgressBars = "49802e3a-d2f1-5c88-81d8-b72133a6f568"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
@@ -14,4 +15,5 @@ Sunny = "2b4a2ac8-8f8b-43e8-abf4-3cb0c45e8736"
 
 [compat]
 CSV = "0.10.16"
+LaTeXStrings = "1.4.0"
 ProgressBars = "1.5.1"

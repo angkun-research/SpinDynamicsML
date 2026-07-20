@@ -17,7 +17,7 @@ class FCautoencoder(nn.Module):
         latent_dim=3,
         ifdecode=False,
         has_variance=False,
-        var_eps=1e-6,
+        var_eps=1e-10,
     ):
         super().__init__()
         self.latent_dim = latent_dim
@@ -30,15 +30,11 @@ class FCautoencoder(nn.Module):
         self.encoder = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.SiLU(),
-            nn.Linear(hidden_dim, hidden_dim // 2),
-            nn.SiLU(),
-            nn.Linear(hidden_dim // 2, latent_out_dim),
+            nn.Linear(hidden_dim, latent_out_dim),
         )
 
         self.decoder = nn.Sequential(
-            nn.Linear(latent_dim, hidden_dim // 2),
-            nn.SiLU(),
-            nn.Linear(hidden_dim // 2, hidden_dim),
+            nn.Linear(latent_dim, hidden_dim),
             nn.SiLU(),
             nn.Linear(hidden_dim, input_dim),
         )
@@ -95,10 +91,9 @@ class FCautoencoder(nn.Module):
 def _latent_loss(
     out_dict,
     target,
-    latent_dim,
     has_variance=False,
     latent_loss_type="mse",    # "mse" or "relative" or "gaussian_nll"
-    var_eps=1e-6,
+    var_eps=1e-10,
 ):
     target = target.to(dtype=out_dict["mu"].dtype, device=out_dict["mu"].device)
     mu = out_dict["mu"]
@@ -133,13 +128,14 @@ def train(
     dataloader,
     optimizer,
     prev_updates,
+    latent_dim,
+    batch_size,
     device="cpu",
-    latent_dim=3,
     has_variance=False,
     latent_loss_type="mse",    # "mse", "relative", "gaussian_nll"
     ifdecode=True,
     mag_recon_loss=1.0,
-    var_eps=1e-6,
+    var_eps=1e-10,
 ):
     model.train()
     last_loss = None
@@ -148,6 +144,7 @@ def train(
     last_rel = None
     last_var_mean = None
     last_mse = None
+    total_rel_error = 0.0
 
     for batch_idx, (data, target) in enumerate(tqdm(dataloader)):
         n_upd = prev_updates + batch_idx
@@ -166,7 +163,6 @@ def train(
         loss_latent, loss_mse, rel_loss, var_mean = _latent_loss(
             out_dict,
             target,
-            latent_dim=latent_dim,
             has_variance=has_variance,
             latent_loss_type=latent_loss_type,
             var_eps=var_eps,
@@ -183,7 +179,11 @@ def train(
         last_mse = loss_mse
         last_rel = rel_loss
         last_var_mean = var_mean
+        total_rel_error += rel_loss.item()
 
+    mean_rel_error = total_rel_error / len(dataloader) / latent_dim / batch_size
+    # take square root to get RMSE
+    mean_rel_error = mean_rel_error ** 0.5
     print(
         f"====> Train set loss: {last_loss.item():.4f}, "
         f"Recon Loss: {last_recon.item():.4f}, "
@@ -191,6 +191,7 @@ def train(
         f"Latent MSE: {last_mse.item():.4f}"
     )
     print(f"====> Relative Latent Loss: {last_rel.item():.6f}")
+    print(f"====> Mean Relative Error: {mean_rel_error:.6f}")
     if last_var_mean is not None:
         print(f"====> Mean Predicted Variance: {last_var_mean.item():.6e}")
 
@@ -201,13 +202,14 @@ def test(
     model,
     dataloader,
     cur_step,
+    latent_dim,
+    batch_size,
     device="cpu",
-    latent_dim=3,
     has_variance=False,
     latent_loss_type="mse",    # "mse", "relative", "gaussian_nll"
     ifdecode=True,
     mag_recon_loss=1.0,
-    var_eps=1e-6,
+    var_eps=1e-10,
 ):
     model.eval()
 
@@ -234,7 +236,6 @@ def test(
             loss_latent, loss_mse, rel_loss, var_mean = _latent_loss(
                 out_dict,
                 target,
-                latent_dim=latent_dim,
                 has_variance=has_variance,
                 latent_loss_type=latent_loss_type,
                 var_eps=var_eps,
@@ -258,6 +259,7 @@ def test(
     test_rel /= n_batches
     if has_variance:
         test_var_mean /= n_batches
+    test_rmse = (test_rel / latent_dim / batch_size) ** 0.5  # RMSE of relative error
 
     print(
         f"====> Test set loss: {test_loss:.4f}, "
@@ -266,5 +268,97 @@ def test(
         f"Latent MSE: {test_mse:.4f}"
     )
     print(f"====> Relative Latent Loss: {test_rel:.6f}")
+    print(f"====> Mean Relative Error: {test_rmse:.6f}")
     if has_variance:
         print(f"====> Mean Predicted Variance: {test_var_mean:.6e}")
+
+
+
+class Conv1Dminimal(nn.Module):
+    """
+    Simplest Conv1D with optional variance head.
+    Forward returns predictions only; no loss is computed here.
+    """
+    def __init__(
+        self,
+        in_channels,
+        input_length,
+        kernel_size=3,
+        hidden_dim=64,
+        latent_dim=3,
+        ifdecode=False,
+        has_variance=False,
+        var_eps=1e-10,
+    ):
+        super().__init__()
+        self.latent_dim = latent_dim
+        self.ifdecode = ifdecode
+        self.has_variance = has_variance
+        self.var_eps = var_eps
+
+        latent_out_dim = latent_dim * 2 if has_variance else latent_dim
+
+        self.encoder = nn.Sequential(
+            nn.Conv1d(in_channels, hidden_dim, kernel_size=kernel_size,padding=kernel_size//2), 
+            nn.SiLU(),
+            nn.Flatten(),  # flatten before the final linear layer
+            nn.Linear(hidden_dim * input_length, hidden_dim), # adjust input size for linear
+            nn.SiLU(),
+            nn.Linear(hidden_dim, latent_out_dim),
+        )
+
+        self.decoder = nn.Sequential(
+            nn.Linear(latent_dim, hidden_dim),
+            nn.SiLU(),
+            nn.Linear(hidden_dim, hidden_dim * input_length), # adjust output size for linear
+            nn.Unflatten(1, (hidden_dim, input_length)),  # unflatten to (batch_size, hidden_dim, input_length)
+            nn.ConvTranspose1d(hidden_dim, in_channels, kernel_size=kernel_size,padding=kernel_size//2),
+        )
+    def encode(self, x, ):
+        """
+        Encodes the input into the latent space.
+        Args:
+            x (torch.Tensor): Input data
+        Returns:
+            torch.Tensor: Encoded data in the latent space
+        """
+        z_raw = self.encoder(x)
+        return z_raw
+
+    def decode(self, z):
+        """
+        Decodes the data from the latent space to the original input space.
+        Args:
+            z (torch.Tensor): Data in the latent space
+        Returns:
+            torch.Tensor: Reconstructed data in the original input space
+        """
+        return self.decoder(z)
+
+    def _split_latent(self, z_raw):
+        if not self.has_variance:
+            mu = z_raw
+            return mu, None
+
+        mu_raw = z_raw[:, :self.latent_dim]
+        var_raw = z_raw[:, self.latent_dim:]
+        mu = mu_raw
+        var = F.softplus(var_raw) + self.var_eps # ensure positivity, safer than exp
+        return mu, var
+
+    def forward(self, x):
+        z_raw = self.encoder(x)
+        mu, var = self._split_latent(z_raw)
+
+        if self.ifdecode:
+            recon_x = self.decoder(mu)
+        else:
+            recon_x = None
+
+        # Return plain dict only (no loss inside model)
+        return {
+            "z_raw": z_raw,  # either latent_dim or 2*latent_dim
+            "mu": mu,        # always latent_dim
+            "var": var,      # None if has_variance=False
+            "x_recon": recon_x,
+        }

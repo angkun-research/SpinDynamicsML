@@ -81,3 +81,14 @@ def create_heatmap_from_flat(flat_disp, flat_data, Nbands, Nq, Egrid=None, sigma
     disp = np.array(flat_disp, dtype=np.float64).reshape((Nbands, Nq))
     data = np.array(flat_data, dtype=np.float64).reshape((Nbands, Nq))
     return create_heatmap(disp, data, Egrid=Egrid, sigma=sigma, normalize=normalize)
+
+
+def set_seed(seed):
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+    # deterministic behavior
+    torch.use_deterministic_algorithms(True)   # raise error on nondeterministic ops
+    torch.backends.cudnn.deterministic = True # disable nondeterministic CuDNN algorithms
+    torch.backends.cudnn.benchmark = False # disable CuDNN auto-tuning (introduces nondeterminism)
