@@ -104,17 +104,19 @@ def _latent_loss(
             raise ValueError("has_variance=True but model did not return var.")
         var = out_dict["var"] + var_eps
         loss_latent = F.gaussian_nll_loss(mu, target, var, reduction="sum")
-        rel = ((mu - target) ** 2) / (target.abs() ** 2 + 1e-12)
+        #rel = ((mu - target) ** 2) / (target.abs() ** 2 + 1e-12)
+        rel = (mu - target).abs() / (target.abs() + 1e-12)
         return loss_latent, mse, rel.sum(), var.mean()
 
-    rel = ((mu - target) ** 2) / (target.abs() ** 2 + 1e-12)
+    #rel = ((mu - target) ** 2) / (target.abs() ** 2 + 1e-12)
+    rel = (mu - target).abs() / (target.abs() + 1e-12)
     rel_sum = rel.sum()
 
     if latent_loss_type == "relative":
         return rel_sum, mse, rel_sum, None
 
     # default
-    return mse, rel_sum, None, None
+    return mse, mse, rel_sum, None
 
 
 def _recon_loss(out_dict, x, ifdecode=True, mag_recon_loss=1.0):
@@ -182,8 +184,7 @@ def train(
         total_rel_error += rel_loss.item()
 
     mean_rel_error = total_rel_error / len(dataloader) / latent_dim / batch_size
-    # take square root to get RMSE
-    mean_rel_error = mean_rel_error ** 0.5
+    #mean_rel_error = mean_rel_error ** 0.5
     print(
         f"====> Train set loss: {last_loss.item():.4f}, "
         f"Recon Loss: {last_recon.item():.4f}, "
@@ -259,8 +260,8 @@ def test(
     test_rel /= n_batches
     if has_variance:
         test_var_mean /= n_batches
-    test_rmse = (test_rel / latent_dim / batch_size) ** 0.5  # RMSE of relative error
-
+    #test_rmse = (test_rel / latent_dim / batch_size) ** 0.5  # RMSE of relative error
+    test_mare = test_rel / latent_dim / batch_size
     print(
         f"====> Test set loss: {test_loss:.4f}, "
         f"Recon Loss: {test_recon:.4f}, "
@@ -268,7 +269,7 @@ def test(
         f"Latent MSE: {test_mse:.4f}"
     )
     print(f"====> Relative Latent Loss: {test_rel:.6f}")
-    print(f"====> Mean Relative Error: {test_rmse:.6f}")
+    print(f"====> Mean Relative Error: {test_mare:.6f}")
     if has_variance:
         print(f"====> Mean Predicted Variance: {test_var_mean:.6e}")
 
