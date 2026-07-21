@@ -30,3 +30,10 @@ fig.tight_layout()
 
 plt.savefig("./plots/sigma_vs_metrics.pdf", bbox_inches="tight")
 plt.close()
+
+
+# y_{true}=[ 1., -0.866667,  0.866667, -1.]
+# \mu_{\sigma=0.0}=[ 1.008152, -0.874677,  0.864058, -1.004507]
+# \sqrt{\mathrm{var}}_{\sigma=0.0}=[0.004378, 0.004239, 0.004361, 0.003883]
+# \mu_{\sigma=0.1}=[ 0.99566 , -0.781094,  0.934481, -0.989526]
+# \sqrt{\mathrm{var}}_{\sigma=0.1}=[0.007628, 0.031654, 0.049083, 0.015609]
