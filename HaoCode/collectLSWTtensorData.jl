@@ -87,7 +87,7 @@ end
 
 
 
-Jsize = 5
+Jsize = 4
 N_uniform = 20
 Nk=20
 Nsamples = 2*N_uniform^(Jsize-1)
@@ -102,16 +102,21 @@ for J10 in [-1,1]
             if Jpmpm == 0.0
                 continue
             end
-            for Jzpm in collect(range(-1, 1, length=N_uniform+1))
-                if Jzpm == 0.0
+            for J20 in collect(range(-1, 1, length=N_uniform+1))
+                if J20 == 0.0
                     continue
                 end
-                for J20 in collect(range(-1, 1, length=N_uniform+1))
-                    if J20 == 0.0
-                        continue
-                    end
-                    Js = [J10, Δ, Jpmpm, Jzpm, J20]
+                if Jsize == 4
+                    Js = [J10, Δ, Jpmpm, 0.0, J20]
                     push!(Js_all, Js)
+                else
+                    for Jzpm in collect(range(-1, 1, length=N_uniform+1))
+                        if Jzpm == 0.0
+                            continue
+                        end
+                        Js = [J10, Δ, Jpmpm, Jzpm, J20]
+                        push!(Js_all, Js)
+                    end
                 end
             end
         end
@@ -136,6 +141,9 @@ for taskid in ProgressBar(1:Nsamples)
     #         IntSxx = copy(Sxxtemp), IntSyy = copy(Syytemp), IntSzz = copy(Szztemp), 
     #         IntSxy = copy(Sxytemp), IntSxz = copy(Sxztemp), IntSyz = copy(Syztemp))
     # append!(rows, local_rows)
+    if Jsize == 4
+        Js = Js[[1, 2, 3, 5]]
+    end
     push!(rows, (Js = copy(Js), disp = vec(res.disp), B = copy(B_same), 
             IntSxx = copy(Sxxtemp), IntSyy = copy(Syytemp), IntSzz = copy(Szztemp), 
             IntSxy = copy(Sxytemp), IntSxz = copy(Sxztemp), IntSyz = copy(Syztemp)))
@@ -143,7 +151,7 @@ end
 
 println("Total rows collected: ", length(rows))
 results = DataFrame(rows)
-CSV.write("data/triangular_anisotropy_uniform_Tensor_Js5_B$(B_same)_Nk$(Nk)_NJ$(N_uniform).csv", results)
+CSV.write("data/triangular_anisotropy_uniform_Tensor_Js$(Jsize)_B$(B_same)_Nk$(Nk)_NJ$(N_uniform).csv", results)
 
 
 

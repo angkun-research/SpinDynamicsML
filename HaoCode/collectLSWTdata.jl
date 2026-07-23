@@ -69,9 +69,9 @@ end
 #     end
 # end
 
-Jsize = 4
-N_uniform = 30
-Nk = 1000
+Jsize = 5 #4
+N_uniform = 20 #30
+Nk = 20
 Nsamples = 2*N_uniform^(Jsize-1)
 Js_all = Vector{Float64}[]
 for J10 in [-1,1]
@@ -88,8 +88,18 @@ for J10 in [-1,1]
                 if J20 == 0.0
                     continue
                 end
-                Js = [J10, Δ, Jpmpm, 0.0, J20]
-                push!(Js_all, Js)
+                if Jsize == 4
+                    Js = [J10, Δ, Jpmpm, 0.0, J20]
+                    push!(Js_all, Js)
+                else
+                    for Jzpm in collect(range(-1, 1, length=N_uniform+1))
+                        if Jzpm == 0.0
+                            continue
+                        end
+                        Js = [J10, Δ, Jpmpm, Jzpm, J20]
+                        push!(Js_all, Js)
+                    end
+                end
             end
         end
     end
@@ -101,8 +111,11 @@ results = DataFrame(Js=Vector{Float64}[], data=Vector{Float64}[], disp=Vector{Fl
 for taskid in ProgressBar(1:Nsamples)
     Js = Js_all[taskid]
     res = Run_LSWT(Js, B_same; dims=(1, 1, 1),Nk=Nk)
+    if Jsize == 4
+        Js = Js[[1, 2, 3, 5]]
+    end
     push!(results, (
-        copy(Js[[1, 2, 3, 5]]), # only keep J1, Δ, J1pmpm, J2
+        copy(Js), # only keep J1, Δ, J1pmpm, J2
         vec(res.data),
         vec(res.disp),
     ))
@@ -110,8 +123,8 @@ end
 
 
 #CSV.write("data/HaoResults/Hao_anisotropy_Js4_Bdep_Nk100.csv", results)
-CSV.write("data/triangular_anisotropy_uniform_Js4_B$(B_same)_Nk$(Nk)_NJ$(N_uniform).csv", results)
-println("saved results to data/triangular_anisotropy_uniform_Js4_B$(B_same)_Nk$(Nk)_NJ$(N_uniform).csv")
+CSV.write("data/triangular_anisotropy_uniform_Js$(Jsize)_B$(B_same)_Nk$(Nk)_NJ$(N_uniform).csv", results)
+println("saved results to data/triangular_anisotropy_uniform_Js$(Jsize)_B$(B_same)_Nk$(Nk)_NJ$(N_uniform).csv")
 
 # # read back the data
 # results = CSV.read("data/triangular_heisenberg_Js10_h20.csv", DataFrame)
