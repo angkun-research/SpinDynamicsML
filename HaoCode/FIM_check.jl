@@ -1,21 +1,17 @@
 # Compute Fisher Information Matrix (FIM) for LSWT outputs using central finite differences.
-#
-# Usage:
-#   julia --project=. HPCtemp/FIM_identifiability.jl
-# or from the REPL:
-#   include("HPCtemp/FIM_identifiability.jl"); res = compute_FIM(J0; ...)
-
 using LinearAlgebra
 using Statistics
 using ProgressBars
 using Sunny
 
-# We polarize the system along the x direction to be consistent with KYbSe₂ experiments
-function polarize_system!(sys)
-    for i in CartesianIndices(sys.dipoles)
-        set_dipole!(sys, (-1, 0, 0), i)
-    end
-end
+include("triangular_nlswt.jl")
+
+# # We polarize the system along the x direction to be consistent with KYbSe₂ experiments
+# function polarize_system!(sys)
+#     for i in CartesianIndices(sys.dipoles)
+#         set_dipole!(sys, (-1, 0, 0), i)
+#     end
+# end
 
 function Run_LSWT(Js,B; dims = (1,1,1),Nk=12, observable=:perp)
     J1, Δ, Jpmpm, Jzpm, J2 = Js
@@ -39,7 +35,7 @@ function Run_LSWT(Js,B; dims = (1,1,1),Nk=12, observable=:perp)
     set_exchange!(sys, J2, Bond(1, 1, [1, 2, 0]))
     set_field!(sys, [B, 0, 0] * units.T)
 
-    polarize_system!(sys)
+    polarize_system!(sys,[-1,0,0])
 
     measure = if observable == :perp
         ssf_perp(sys)
@@ -53,6 +49,38 @@ function Run_LSWT(Js,B; dims = (1,1,1),Nk=12, observable=:perp)
     res = intensities_bands(swt, path)
 
     return res
+end
+
+function Run_Lanczos(Js, B;
+    clustersize=(11, 11, 1),
+    dir=[1.0, 0.0, 0.0],
+    energies=collect(0.0:0.01:10.0),
+    eta=0.1,
+    observable=:perp,
+    tensor_components=:sym6
+)
+    res = triangular_nlswt_lanczos_calculations(Js, clustersize, copy(dir); B=B)
+    isnothing(res) && error("Lanczos calculation failed for Js=$(Js)")
+
+    B_used, qs_path, as_path, bs_path, norm2s_path = res
+
+    if observable == :perp
+        img = map_lanczos_results_to_neutron_intensities(
+            qs_path, as_path, bs_path, norm2s_path, energies, eta
+        )  # size: (nq, nE)
+        return (B=B_used, qs=qs_path, data=img)
+    elseif observable == :tensor
+        dssf = map_lanczos_results_to_dssf_tensor(
+            qs_path, as_path, bs_path, norm2s_path, energies, eta
+        )  # size: (6, nq, nE)
+
+        if tensor_components != :sym6
+            error("Lanczos backend currently supports tensor_components=:sym6 only")
+        end
+        return (B=B_used, qs=qs_path, data=dssf)
+    else
+        error("Unknown observable=$(observable). Use :perp or :tensor")
+    end
 end
 
 function flatten_tensor_data(res; tensor_components=:sym6)
@@ -82,23 +110,64 @@ function flatten_tensor_data(res; tensor_components=:sym6)
 end
 
 # Build the observable vector S(J): concatenation of dispersion then intensity
-function S_vec(Js; B=60, Nk=1000, dims=(1,1,1), observable=:perp, tensor_components=:sym6)
+# function S_vec(Js; B=60, Nk=1000, dims=(1,1,1), observable=:perp, tensor_components=:sym6)
+#     d = length(Js)
+#     if d == 4
+#         Js = vcat(Js[1:3], 0.0, Js[4])  # insert Jzpm=0 for 4-parameter case
+#     end
+#     res = Run_LSWT(Js, B; dims=dims, Nk=Nk, observable=observable)
+#     dvec = vec(res.disp)
+#     idvec = if observable == :perp
+#         vec(res.data)
+#     else
+#         flatten_tensor_data(res; tensor_components=tensor_components)
+#     end
+#     return vcat(dvec, idvec)
+# end
+function S_vec(Js;
+    backend=:lswt,
+    B=60,
+    Nk=1000,
+    dims=(1,1,1),
+    observable=:perp,
+    tensor_components=:sym6,
+    clustersize=(11,11,1),
+    dir=[1.0,0.0,0.0],
+    energies=collect(0.0:0.01:8.0),
+    eta=0.1
+)
     d = length(Js)
     if d == 4
         Js = vcat(Js[1:3], 0.0, Js[4])  # insert Jzpm=0 for 4-parameter case
     end
-    res = Run_LSWT(Js, B; dims=dims, Nk=Nk, observable=observable)
-    dvec = vec(res.disp)
-    idvec = if observable == :perp
-        vec(res.data)
-    else
-        flatten_tensor_data(res; tensor_components=tensor_components)
-    end
-    return vcat(dvec, idvec)
-end
 
+    if backend == :lswt
+        res = Run_LSWT(Js, B; dims=dims, Nk=Nk, observable=observable)
+        dvec = vec(res.disp)
+        idvec = observable == :perp ? vec(res.data) : flatten_tensor_data(res; tensor_components=tensor_components)
+        return vcat(dvec, idvec)
+
+    elseif backend == :lanczos
+        res = Run_Lanczos(Js, B;
+            clustersize=clustersize,
+            dir=dir,
+            energies=energies,
+            eta=eta,
+            observable=observable,
+            tensor_components=tensor_components
+        )
+
+        # Lanczos helper currently returns only intensity-like observables (no dispersion branch).
+        dvec = Float64[]
+        idvec = vec(res.data)
+        return vcat(dvec, idvec)
+
+    else
+        error("Unknown backend=$(backend). Use :lswt or :lanczos")
+    end
+end
 """
-compute_FIM(Js0; δ=1e-3, B=60, Nk=1000, dims=(1,1,1), sigma=nothing, check_steps=[1e-2,1e-3,1e-4])
+compute_FIM(Js0; δ=1e-3, B=60, Nk=1000, dims=(1,1,1), sigma=nothing)
 
 Returns a NamedTuple with:
 - F: the d×d Fisher information matrix (whitened if `sigma` provided)
@@ -108,52 +177,108 @@ Returns a NamedTuple with:
 - info: diagnostic info (cond, smallest nonzero eigen, step used)
 Options:
 - `sigma`: optional vector of length m providing measurement std; if provided rows of J_S are divided by sigma (whitening).
-- `check_steps`: list of δ multipliers to test convergence (optional).
 """
-function compute_FIM(Js0; δ=1e-3, B=60, Nk=1000, dims=(1,1,1), sigma=nothing, observable=:perp, tensor_components=:sym6)
+# function compute_FIM(Js0; δ=1e-3, B=60, Nk=1000, dims=(1,1,1), sigma=nothing, observable=:perp, tensor_components=:sym6)
+#     d = length(Js0)
+#     S0 = S_vec(Js0; B=B, Nk=Nk, dims=dims, observable=observable, tensor_components=tensor_components)
+#     m = length(S0)
+#     J_S = zeros(Float64, m, d)
+
+#     # central finite differences
+#     for i in 1:d
+#         step = δ * max(abs(Js0[i]), 1.0)
+#         dp = zeros(d); dp[i] = step
+#         Sp = S_vec(Js0 .+ dp; B=B, Nk=Nk, dims=dims, observable=observable, tensor_components=tensor_components)
+#         Sm = S_vec(Js0 .- dp; B=B, Nk=Nk, dims=dims, observable=observable, tensor_components=tensor_components)
+#         J_S[:, i] = (Sp .- Sm) ./ (2 * step)
+#     end
+
+#     # Optional whitening by measurement std (sigma)
+#     J_S_used = copy(J_S)
+#     if sigma !== nothing
+#         @assert length(sigma) == m "sigma must have length = number of observables"
+#         invsigma = 1.0 ./ sigma
+#         # scale each row
+#         for r in 1:m
+#             J_S_used[r, :] .*= invsigma[r]
+#         end
+#     end
+
+#     # Form F (d x d)
+#     F = J_S_used' * J_S_used
+#     F = Symmetric(F)  # ensure symmetric for eigen decomposition
+
+#     # eigen / spectrum
+#     eig = eigen(F)
+#     # sort descending
+#     idx = sortperm(eig.values, rev=true)
+#     evals = eig.values[idx]
+#     evecs = eig.vectors[:, idx]
+
+#     cond_est = (evals[1] / (evals[end] > 0 ? evals[end] : eps()))
+#     info = Dict(
+#         :cond => cond_est,
+#         :min_eval => evals[end],
+#         :max_eval => evals[1],
+#         :m => m,
+#         :d => d,
+#         :observable => observable,
+#         :tensor_components => tensor_components
+#     )
+
+#     return (F=F, evals=evals, evecs=evecs, J_S=J_S, info=info)
+# end
+
+function compute_FIM(Js0;
+    delta=1e-3,
+    backend=:lswt,
+    B=60,
+    Nk=1000,
+    dims=(1,1,1),
+    observable=:perp,
+    tensor_components=:sym6,
+    clustersize=(11,11,1),
+    dir=[1.0,0.0,0.0],
+    energies=collect(0.0:0.01:8.0),
+    eta=0.1
+)
     d = length(Js0)
-    S0 = S_vec(Js0; B=B, Nk=Nk, dims=dims, observable=observable, tensor_components=tensor_components)
+    S0 = S_vec(Js0; backend=backend, B=B, Nk=Nk, dims=dims, observable=observable,
+               tensor_components=tensor_components, clustersize=clustersize, dir=dir,
+               energies=energies, eta=eta)
     m = length(S0)
     J_S = zeros(Float64, m, d)
 
-    # central finite differences
     for i in 1:d
-        step = δ * max(abs(Js0[i]), 1.0)
+        step = delta * max(abs(Js0[i]), 1.0)
         dp = zeros(d); dp[i] = step
-        Sp = S_vec(Js0 .+ dp; B=B, Nk=Nk, dims=dims, observable=observable, tensor_components=tensor_components)
-        Sm = S_vec(Js0 .- dp; B=B, Nk=Nk, dims=dims, observable=observable, tensor_components=tensor_components)
+        println("Computing column $(i) of $(d) in Jacobian")
+        Sp = S_vec(Js0 .+ dp; backend=backend, B=B, Nk=Nk, dims=dims, observable=observable,
+                   tensor_components=tensor_components, clustersize=clustersize, dir=dir,
+                   energies=energies, eta=eta)
+        println("done 1.")
+        Sm = S_vec(Js0 .- dp; backend=backend, B=B, Nk=Nk, dims=dims, observable=observable,
+                   tensor_components=tensor_components, clustersize=clustersize, dir=dir,
+                   energies=energies, eta=eta)
+        println("done 2.")
         J_S[:, i] = (Sp .- Sm) ./ (2 * step)
     end
 
-    # Optional whitening by measurement std (sigma)
     J_S_used = copy(J_S)
-    if sigma !== nothing
-        @assert length(sigma) == m "sigma must have length = number of observables"
-        invsigma = 1.0 ./ sigma
-        # scale each row
-        for r in 1:m
-            J_S_used[r, :] .*= invsigma[r]
-        end
-    end
-
-    # Form F (d x d)
-    F = J_S_used' * J_S_used
-    F = Symmetric(F)  # ensure symmetric for eigen decomposition
-
-    # eigen / spectrum
+    F = Symmetric(J_S_used' * J_S_used)
     eig = eigen(F)
-    # sort descending
     idx = sortperm(eig.values, rev=true)
     evals = eig.values[idx]
     evecs = eig.vectors[:, idx]
+    cond_est = evals[1] / (evals[end] > 0 ? evals[end] : eps())
 
-    cond_est = (evals[1] / (evals[end] > 0 ? evals[end] : eps()))
     info = Dict(
         :cond => cond_est,
         :min_eval => evals[end],
         :max_eval => evals[1],
         :m => m,
         :d => d,
+        :backend => backend,
         :observable => observable,
         :tensor_components => tensor_components
     )
@@ -161,51 +286,36 @@ function compute_FIM(Js0; δ=1e-3, B=60, Nk=1000, dims=(1,1,1), sigma=nothing, o
     return (F=F, evals=evals, evecs=evecs, J_S=J_S, info=info)
 end
 
-# Optional helper: convergence check over multiple δ values (prints relative changes)
-function delta_convergence(Js0; deltas=[1e-2,1e-3,1e-4], B=60, Nk=200, dims=(1,1,1), observable=:perp, tensor_components=:sym6)
-    println("Running δ-convergence for: ", deltas)
-    results = Dict()
-    prev_JS = nothing
-    for δ in deltas
-        res = compute_FIM(Js0; δ=δ, B=B, Nk=Nk, dims=dims, observable=observable, tensor_components=tensor_components)
-        results[δ] = res
-        if prev_JS !== nothing
-            # compare columns
-            diff = norm(prev_JS.J_S - res.J_S) / max(norm(prev_JS.J_S), eps())
-            println("δ=", δ, " rel change in J_S: ", diff)
-        end
-        prev_JS = res
-    end
-    return results
-end
-
 # Small example runner when invoked directly
 println("FIM_identifiability.jl — example run")
     # Example 4-parameter anisotropy point (adjust to your model dimensionality)
-J0 = [1.0, 0.9, 0.1, 0.0, 0.2]   # length d must match your Run_LSWT expectation slice
-J0 = [1.0, 0.9, 0.1, 0.2]
+J0 = [1.0, 0.9, 0.1, 0.05, 0.2]   # length d must match your Run_LSWT expectation slice
+#J0 = [1.0, 0.9, 0.1, 0.2]
 println("Computing FIM at J0 = ", J0)
-observable = :tensor #:perp
+observable = :tensor #:tensor #:perp
+println("Observable: ", observable)
 tensor_components = :sym6
-res = compute_FIM(J0; δ=1e-3, B=60, Nk=200, observable=observable, tensor_components=tensor_components)
+backend = :lanczos #:lswt #:lanczos
+println("Backend: ", backend)
+res = compute_FIM(J0; backend=backend, delta=1e-3, B=60, Nk=200, observable=observable, tensor_components=tensor_components)
 println("Eigenvalues (desc): ", res.evals)
 println("Condition est: ", res.info[:cond])
 
-J0s = [
-    [1.0, 0.2, 0.1, 0.05, 0.5],
-    [1.0, 0.3, 0.1, 0.1, 0.8],
-    [1.0, 0.3, -0.2, -0.1, -0.5],
-    [-1.0, 0.5, 0.2, 0.1, 0.3],
-    [-1.0, 0.4, 0.3, -0.2, 0.1]
-]
-for J0 in J0s
-    println("\nComputing FIM at J0 = ", J0)
-    local res = compute_FIM(J0; δ=1e-3, B=60, Nk=200, observable=observable, tensor_components=tensor_components)
-    println("Eigenvalues (desc): ", res.evals)
-    println("Condition est: ", res.info[:cond])
-    J04 = J0[[1,2,3,5]]  # drop Jzpm for 4-parameter case
-    println("\nComputing FIM at 4-parameter J0 = ", J04)
-    local res4 = compute_FIM(J04; δ=1e-3, B=60, Nk=200, observable=observable, tensor_components=tensor_components)
-    println("Eigenvalues (desc): ", res4.evals)
-    println("Condition est: ", res4.info[:cond])
-end
+# J0s = [
+#     [1.0, 0.2, 0.1, 0.05, 0.5],
+#     [1.0, 0.3, 0.1, 0.1, 0.8],
+#     [1.0, 0.3, -0.2, -0.1, -0.5],
+#     [-1.0, 0.5, 0.2, 0.1, 0.3],
+#     [-1.0, 0.4, 0.3, -0.2, 0.1]
+# ]
+# for J0 in J0s
+#     println("\nComputing FIM at J0 = ", J0)
+#     local res = compute_FIM(J0; delta=1e-3, B=60, Nk=200, observable=observable, tensor_components=tensor_components)
+#     println("Eigenvalues (desc): ", res.evals)
+#     println("Condition est: ", res.info[:cond])
+#     J04 = J0[[1,2,3,5]]  # drop Jzpm for 4-parameter case
+#     println("\nComputing FIM at 4-parameter J0 = ", J04)
+#     local res4 = compute_FIM(J04; delta=1e-3, B=60, Nk=200, observable=observable, tensor_components=tensor_components)
+#     println("Eigenvalues (desc): ", res4.evals)
+#     println("Condition est: ", res4.info[:cond])
+# end
