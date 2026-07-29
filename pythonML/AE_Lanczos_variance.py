@@ -29,8 +29,11 @@ def load_raw_data(csv_path):
     # Hao's data format
     for col in ['data', 'disp', 'Js']:
         df[col] = df[col].apply(json.loads)
-    disp = np.array(df['disp'].tolist(), dtype=np.float32)
-    inten = np.array(df['data'].tolist(), dtype=np.float32)
+    # wrong naming in previous data
+    disp = np.array(df['data'].tolist(), dtype=np.float32)   # (N, L)
+    inten = np.array(df['disp'].tolist(), dtype=np.float32)  # (N, L)
+    # disp = np.array(df['disp'].tolist(), dtype=np.float32)
+    # inten = np.array(df['data'].tolist(), dtype=np.float32)
     y = np.array(df['Js'].tolist(), dtype=np.float32)
     print(f"Total samples: {len(df)}")
     #X = np.stack([disp, inten], axis=1)
