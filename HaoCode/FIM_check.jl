@@ -289,10 +289,11 @@ end
 # Small example runner when invoked directly
 println("FIM_identifiability.jl — example run")
     # Example 4-parameter anisotropy point (adjust to your model dimensionality)
-J0 = [1.0, 0.9, 0.1, 0.05, 0.2]   # length d must match your Run_LSWT expectation slice
+#J0 = [1.0, 0.9, 0.1, 0.05, 0.2]   # length d must match your Run_LSWT expectation slice
 #J0 = [1.0, 0.9, 0.1, 0.2]
+J0 = [1.0,0.2,0.1,0.05, 0.5]
 println("Computing FIM at J0 = ", J0)
-observable = :tensor #:tensor #:perp
+observable = :perp #:tensor #:perp
 println("Observable: ", observable)
 tensor_components = :sym6
 backend = :lanczos #:lswt #:lanczos

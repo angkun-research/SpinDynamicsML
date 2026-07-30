@@ -6,6 +6,7 @@ import numpy as np
 
 from AutoEncoderClassNew import train, test
 from AutoEncoderClassNew import FCautoencoder, Conv1Dminimal
+from pythonML.utils import set_seed
 
 # --- Config ---
 CSV_PATH = './data/triangular_anisotropy_uniform_Js4_B50_Nk20.csv'
@@ -21,6 +22,8 @@ has_variance = True #False
 ifdecode = False #True
 sigma = 0.01 # noise
 #os.makedirs(MODEL_OUT, exist_ok=True)
+seed = 1234
+set_seed(seed)
 
 # --- Load data (same logic as RegressionTest.py) ---
 import pandas as pd
@@ -118,12 +121,24 @@ optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=DW)
 n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 print(f'Model has {n_params} trainable parameters.')
 
-prev_updates = 0
+train_mares = []
+train_mvars = []
+test_mares = []
+test_mvars = []
 for epoch in range(1, EPOCHS + 1):
     print(f"Epoch {epoch}/{EPOCHS} — device={DEVICE}")
-    prev_updates = train(model, train_loader, optimizer, prev_updates, has_variance=has_variance,
+    all_out_train = train(model, train_loader, optimizer,has_variance=has_variance,
         latent_dim=NumOfJ, batch_size=BATCH_SIZE, device=DEVICE)
-    test(model, val_loader, has_variance=has_variance, cur_step=epoch, latent_dim=NumOfJ, batch_size=BATCH_SIZE, device=DEVICE)
+    all_out_test = test(model, val_loader, has_variance=has_variance, latent_dim=NumOfJ, batch_size=BATCH_SIZE, device=DEVICE)
+    train_mares.append(all_out_train["train_mare"])
+    train_mvars.append(all_out_train["train_var_mean"])
+    test_mares.append(all_out_test["test_mare"])
+    test_mvars.append(all_out_test["test_var_mean"])
+
+print("Minimum train MARE:", min(train_mares), "at epoch", np.argmin(train_mares) + 1)
+print("Minimum train MVAR:", min(train_mvars), "at epoch", np.argmin(train_mvars) + 1)
+print("Minimum test MARE:", min(test_mares), "at epoch", np.argmin(test_mares) + 1)
+print("Minimum test MVAR:", min(test_mvars), "at epoch", np.argmin(test_mvars) + 1)
 
 #save checkpoint at only the final epoch
 # torch.save({

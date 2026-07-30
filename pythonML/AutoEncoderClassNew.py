@@ -129,7 +129,6 @@ def train(
     model,
     dataloader,
     optimizer,
-    prev_updates,
     latent_dim,
     batch_size,
     device="cpu",
@@ -149,7 +148,6 @@ def train(
     total_rel_error = 0.0
 
     for batch_idx, (data, target) in enumerate(tqdm(dataloader)):
-        n_upd = prev_updates + batch_idx
         data = data.to(device)
         target = target.to(device)
 
@@ -196,13 +194,22 @@ def train(
     if last_var_mean is not None:
         print(f"====> Mean Predicted Variance: {last_var_mean.item():.6e}")
 
-    return prev_updates + len(dataloader)
+    all_out_dict = {
+        "train_loss": last_loss.item(),
+        "train_recon": last_recon.item(),
+        "train_latent": last_latent.item(),
+        "train_mse": last_mse.item(),
+        "train_rel": last_rel.item(),
+        "train_var_mean": last_var_mean.item() if last_var_mean is not None else None,
+        "train_mare": mean_rel_error,
+    }
+
+    return all_out_dict
 
 
 def test(
     model,
     dataloader,
-    cur_step,
     latent_dim,
     batch_size,
     device="cpu",
@@ -273,6 +280,16 @@ def test(
     if has_variance:
         print(f"====> Mean Predicted Variance: {test_var_mean:.6e}")
 
+    all_out_dict = {
+        "test_loss": test_loss,
+        "test_recon": test_recon,
+        "test_latent": test_latent,
+        "test_mse": test_mse,
+        "test_rel": test_rel,
+        "test_var_mean": test_var_mean if has_variance else None,
+        "test_mare": test_mare,
+    }
+    return all_out_dict
 
 
 class Conv1Dminimal(nn.Module):
