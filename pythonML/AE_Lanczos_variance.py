@@ -7,7 +7,8 @@ import pandas as pd
 
 from AutoEncoderClassNew import train, test
 from AutoEncoderClassNew import FCautoencoder, Conv1Dminimal
-from pythonML.utils import set_seed
+from utils import set_seed
+from utils import fit_standardizer, apply_standardizer,add_bandwidth_noise, make_dataset
 
 # --- Config ---
 CSV_PATH = './data/HaoResults/Hao_anisotropy_Js4_uniform_trace_Filter100_Bsats.csv'
@@ -68,36 +69,6 @@ def load_raw_data(csv_path):
 
     y[:, 1] *= y[:, 0]
     return X, y
-
-
-def fit_standardizer(X_train_raw):
-    X_mean = X_train_raw.mean(axis=0, keepdims=True)
-    X_std = X_train_raw.std(axis=0, keepdims=True) + 1e-8
-    return X_mean, X_std
-
-def apply_standardizer(X, X_mean, X_std):
-    return (X - X_mean) / X_std
-
-def add_bandwidth_noise(X, sigma, seed=1234, intensity_channel=1):
-    rng = np.random.default_rng(seed)
-    eps = rng.normal(0.0, 1.0, size=X.shape).astype(np.float32)
-    max_vals = X.max(axis=2, keepdims=True)
-    min_vals = X.min(axis=2, keepdims=True)
-    # default: bandwidth = max - min (used for dispersion)
-    bandwidth = max_vals - min_vals
-    # for intensity channel use max only (min is effectively 0)
-    #bandwidth[:, intensity_channel:intensity_channel+1, :] = max_vals[:, intensity_channel:intensity_channel+1, :]
-    return X + sigma * bandwidth * eps
-
-def make_dataset(X, y):
-    return TensorDataset(
-        torch.from_numpy(X.astype(np.float32)),
-        torch.from_numpy(y.astype(np.float32)),
-    )
-
-def make_loader(dataset, batch_size, shuffle):
-    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, drop_last=False)
-
 
 X, y = load_raw_data(CSV_PATH)
 X_mean, X_std = fit_standardizer(X)

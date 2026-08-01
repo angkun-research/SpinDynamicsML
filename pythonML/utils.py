@@ -1,6 +1,7 @@
 import numpy as np
 import subprocess
 import torch
+from torch.utils.data import TensorDataset
 
 def pick_best_device(min_free_gb=10.0):
     if not torch.cuda.is_available():
@@ -92,3 +93,32 @@ def set_seed(seed):
     torch.use_deterministic_algorithms(True)   # raise error on nondeterministic ops
     torch.backends.cudnn.deterministic = True # disable nondeterministic CuDNN algorithms
     torch.backends.cudnn.benchmark = False # disable CuDNN auto-tuning (introduces nondeterminism)
+
+
+def fit_standardizer(X_train_raw):
+    X_mean = X_train_raw.mean(axis=0, keepdims=True)
+    X_std = X_train_raw.std(axis=0, keepdims=True) + 1e-8
+    return X_mean, X_std
+
+def apply_standardizer(X, X_mean, X_std):
+    return (X - X_mean) / X_std
+
+def add_bandwidth_noise(X, sigma, seed=1234):
+    rng = np.random.default_rng(seed)
+    eps = rng.normal(0.0, 1.0, size=X.shape).astype(np.float32)
+
+    max_vals = X.max(axis=2, keepdims=True)
+    min_vals = X.min(axis=2, keepdims=True)
+    bandwidth = max_vals - min_vals
+
+    # Treat second half (intensity channels) as max-based bandwidth
+    c_half = X.shape[1] // 2
+    bandwidth[:, c_half:, :] = max_vals[:, c_half:, :]
+
+    return X + sigma * bandwidth * eps
+
+def make_dataset(X, y):
+    return TensorDataset(
+        torch.from_numpy(X.astype(np.float32)),
+        torch.from_numpy(y.astype(np.float32)),
+    )
