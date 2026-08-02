@@ -20,6 +20,7 @@ warnings.filterwarnings('ignore') # Suppress warnings for cleaner output
 
 # ------ Config ------
 CSV_PATH    = './data/triangular_anisotropy_uniform_Js4_B50_Nk20_NJ30.csv'
+#CSV_PATH = './data/HaoResults/Hao_anisotropy_Js4_uniform_trace_Filter100_Bsats.csv'
 SEED        = 1234
 TRAIN_RATIO = 0.9
 GPR_MAX_TRAIN = 2000
@@ -28,8 +29,10 @@ GPR_MAX_TRAIN = 2000
 def build_models(seed):
     # Wide noise bounds: simulated data is nearly noise-free, so the optimal
     # noise_level can be far below the default lower bound (1e-5).
-    rbf_kernel = (RBF(length_scale=1.0, length_scale_bounds=(1e-3, 1e4))
-                  + WhiteKernel(noise_level=1e-2, noise_level_bounds=(1e-12, 1e1)))
+    rbf_kernel = (RBF(length_scale=1.0, length_scale_bounds=(1e-5, 1e5))
+                + WhiteKernel(noise_level=1e-1, noise_level_bounds=(1e-10, 1e2)))
+                #(RBF(length_scale=1.0, length_scale_bounds=(1e-3, 1e4))
+                  #+ WhiteKernel(noise_level=1e-2, noise_level_bounds=(1e-12, 1e1)))
     return {
         'Ridge':            Ridge(alpha=1.0),
         'ElasticNet':       MultiTaskElasticNet(alpha=0.01, l1_ratio=0.5, max_iter=5000),
@@ -48,7 +51,7 @@ def build_models(seed):
     }
 
 # ------ Data utilities ------
-def load_raw_data(csv_path):
+def load_raw_data_LSWT(csv_path):
     df = pd.read_csv(csv_path)
     for col in ['data', 'disp', 'Js']:
         df[col] = df[col].apply(json.loads)
@@ -57,6 +60,50 @@ def load_raw_data(csv_path):
     X = np.concatenate([disp, inten], axis=1)
     y = np.array(df['Js'].tolist(), dtype=np.float32)
     y[:, 1] *= y[:, 0]
+    print(f"X shape: {X.shape}, y shape: {y.shape}")
+    return X, y
+
+def load_raw_data_lanczos(csv_path):
+    df = pd.read_csv(csv_path)
+    # Hao's data format
+    for col in ['data', 'disp', 'Js']:
+        df[col] = df[col].apply(json.loads)
+    # wrong naming in previous data
+    disp = np.array(df['data'].tolist(), dtype=np.float32)   # (N, L)
+    inten = np.array(df['disp'].tolist(), dtype=np.float32)  # (N, L)
+    # disp = np.array(df['disp'].tolist(), dtype=np.float32)
+    # inten = np.array(df['data'].tolist(), dtype=np.float32)
+    y = np.array(df['Js'].tolist(), dtype=np.float32)
+    print(f"Total samples: {len(df)}")
+    #X = np.stack([disp, inten], axis=1)
+
+    y = np.delete(y, 3, axis=1)   # remove 4th column (0-based index), shape becomes (N, 4)
+    N = len(df)
+    n_comp = 1 #6
+    n_e = 100 #3 #20
+    n_k = disp.shape[1] // n_comp // n_e
+    # Recover (N, 6, n_k, n_e)
+    disp4 = disp.reshape(N, n_comp, n_k, n_e)
+    inten4 = inten.reshape(N, n_comp, n_k, n_e)
+    # Move energy before momentum, then flatten (component, energy) -> channels
+    # (N, 6, n_e, n_k) -> (N, 6 * n_e, n_k)
+    # disp_ch = np.transpose(disp4, (0, 1, 3, 2)).reshape(N, n_comp * n_e, n_k)
+    # data_ch = np.transpose(inten4, (0, 1, 3, 2)).reshape(N, n_comp * n_e, n_k)
+    # Keep only one component (component 0)
+    disp4 = disp4[:, 0:1, :, :]   # shape: (N, 1, n_k, n_e)
+    inten4 = inten4[:, 0:1, :, :] # shape: (N, 1, n_k, n_e)
+    disp_ch = np.transpose(disp4, (0, 1, 3, 2)).reshape(N, 1 * n_e, n_k)
+    data_ch = np.transpose(inten4, (0, 1, 3, 2)).reshape(N, 1 * n_e, n_k)
+    X = np.concatenate([disp_ch, data_ch], axis=1) # (N, 12 * n_e, n_k)
+
+    mask = (y != 0).all(axis=1) 
+    X = X[mask]
+    y = y[mask]
+    print(f"Filtered samples: {len(y)}")
+    print(f"X shape: {X.shape}, y shape: {y.shape}")
+
+    y[:, 1] *= y[:, 0]
+    X = X.reshape(X.shape[0], -1) # flatten to (N, 2 * n_e * n_k)
     return X, y
 
 def split_indices(n, train_ratio=0.9, seed=1234):
@@ -74,7 +121,8 @@ def mse(y_pred, y_true):
 # ------ Main ------
 np.random.seed(SEED)
 
-X, y = load_raw_data(CSV_PATH)
+X, y = load_raw_data_LSWT(CSV_PATH)
+#X, y = load_raw_data_lanczos(CSV_PATH)
 train_idx, test_idx = split_indices(len(X), TRAIN_RATIO, SEED)
 X_train, y_train = X[train_idx], y[train_idx]
 X_test,  y_test  = X[test_idx],  y[test_idx]
@@ -90,6 +138,10 @@ print(f"{'-'*20} {'-'*14} {'-'*13} {'-'*14} {'-'*13}")
 
 for name, model in build_models(SEED).items():
     if name == 'GPR' and len(y_train) > GPR_MAX_TRAIN:
+        rng = np.random.default_rng(SEED)
+        idx = rng.choice(len(y_train), GPR_MAX_TRAIN, replace=False)
+        X_fit, y_fit = X_train_s[idx], y_train[idx]
+    elif name == 'KernelRidge' and len(y_train) > GPR_MAX_TRAIN:
         rng = np.random.default_rng(SEED)
         idx = rng.choice(len(y_train), GPR_MAX_TRAIN, replace=False)
         X_fit, y_fit = X_train_s[idx], y_train[idx]
