@@ -146,6 +146,7 @@ def train(
     last_var_mean = None
     last_mse = None
     total_rel_error = 0.0
+    total_mse = 0.0
 
     for batch_idx, (data, target) in enumerate(tqdm(dataloader)):
         data = data.to(device)
@@ -180,16 +181,19 @@ def train(
         last_rel = rel_loss
         last_var_mean = var_mean
         total_rel_error += rel_loss.item()
+        total_mse += loss_mse.item()
 
     mean_rel_error = total_rel_error / len(dataloader) / latent_dim / batch_size
     #mean_rel_error = mean_rel_error ** 0.5
+    total_mse = total_mse / len(dataloader) / latent_dim / batch_size
     print(
         f"====> Train set loss: {last_loss.item():.4f}, "
         f"Recon Loss: {last_recon.item():.4f}, "
         f"Latent Loss: {last_latent.item():.4f}"
-        f"Latent MSE: {last_mse.item():.4f}"
+        f"Latent TSE: {last_mse.item():.4f}"
     )
     print(f"====> Relative Latent Loss: {last_rel.item():.6f}")
+    print(f"====> Total Latent MSE: {total_mse:.6f}")
     print(f"====> Mean Relative Error: {mean_rel_error:.6f}")
     if last_var_mean is not None:
         print(f"====> Mean Predicted Variance: {last_var_mean.item():.6e}")
@@ -198,7 +202,7 @@ def train(
         "train_loss": last_loss.item(),
         "train_recon": last_recon.item(),
         "train_latent": last_latent.item(),
-        "train_mse": last_mse.item(),
+        "train_mse": total_mse, #last_mse.item(),
         "train_rel": last_rel.item(),
         "train_var_mean": last_var_mean.item() if last_var_mean is not None else None,
         "train_mare": mean_rel_error,
@@ -269,13 +273,15 @@ def test(
         test_var_mean /= n_batches
     #test_rmse = (test_rel / latent_dim / batch_size) ** 0.5  # RMSE of relative error
     test_mare = test_rel / latent_dim / batch_size
+    test_mse = test_mse / latent_dim / batch_size
     print(
         f"====> Test set loss: {test_loss:.4f}, "
         f"Recon Loss: {test_recon:.4f}, "
         f"Latent Loss: {test_latent:.4f}, "
-        f"Latent MSE: {test_mse:.4f}"
+        f"Latent TSE: {test_mse:.4f}"
     )
     print(f"====> Relative Latent Loss: {test_rel:.6f}")
+    print(f"====> Total Latent MSE: {test_mse:.6f}")
     print(f"====> Mean Relative Error: {test_mare:.6f}")
     if has_variance:
         print(f"====> Mean Predicted Variance: {test_var_mean:.6e}")
