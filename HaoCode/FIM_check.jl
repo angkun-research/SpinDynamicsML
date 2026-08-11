@@ -6,13 +6,6 @@ using Sunny
 
 include("triangular_nlswt.jl")
 
-# # We polarize the system along the x direction to be consistent with KYbSe₂ experiments
-# function polarize_system!(sys)
-#     for i in CartesianIndices(sys.dipoles)
-#         set_dipole!(sys, (-1, 0, 0), i)
-#     end
-# end
-
 function Run_LSWT(Js,B; dims = (1,1,1),Nk=12, observable=:perp)
     J1, Δ, Jpmpm, Jzpm, J2 = Js
     units = Units(:meV, :angstrom)
@@ -109,21 +102,6 @@ function flatten_tensor_data(res; tensor_components=:sym6)
     end
 end
 
-# Build the observable vector S(J): concatenation of dispersion then intensity
-# function S_vec(Js; B=60, Nk=1000, dims=(1,1,1), observable=:perp, tensor_components=:sym6)
-#     d = length(Js)
-#     if d == 4
-#         Js = vcat(Js[1:3], 0.0, Js[4])  # insert Jzpm=0 for 4-parameter case
-#     end
-#     res = Run_LSWT(Js, B; dims=dims, Nk=Nk, observable=observable)
-#     dvec = vec(res.disp)
-#     idvec = if observable == :perp
-#         vec(res.data)
-#     else
-#         flatten_tensor_data(res; tensor_components=tensor_components)
-#     end
-#     return vcat(dvec, idvec)
-# end
 function S_vec(Js;
     backend=:lswt,
     B=60,
@@ -178,57 +156,6 @@ Returns a NamedTuple with:
 Options:
 - `sigma`: optional vector of length m providing measurement std; if provided rows of J_S are divided by sigma (whitening).
 """
-# function compute_FIM(Js0; δ=1e-3, B=60, Nk=1000, dims=(1,1,1), sigma=nothing, observable=:perp, tensor_components=:sym6)
-#     d = length(Js0)
-#     S0 = S_vec(Js0; B=B, Nk=Nk, dims=dims, observable=observable, tensor_components=tensor_components)
-#     m = length(S0)
-#     J_S = zeros(Float64, m, d)
-
-#     # central finite differences
-#     for i in 1:d
-#         step = δ * max(abs(Js0[i]), 1.0)
-#         dp = zeros(d); dp[i] = step
-#         Sp = S_vec(Js0 .+ dp; B=B, Nk=Nk, dims=dims, observable=observable, tensor_components=tensor_components)
-#         Sm = S_vec(Js0 .- dp; B=B, Nk=Nk, dims=dims, observable=observable, tensor_components=tensor_components)
-#         J_S[:, i] = (Sp .- Sm) ./ (2 * step)
-#     end
-
-#     # Optional whitening by measurement std (sigma)
-#     J_S_used = copy(J_S)
-#     if sigma !== nothing
-#         @assert length(sigma) == m "sigma must have length = number of observables"
-#         invsigma = 1.0 ./ sigma
-#         # scale each row
-#         for r in 1:m
-#             J_S_used[r, :] .*= invsigma[r]
-#         end
-#     end
-
-#     # Form F (d x d)
-#     F = J_S_used' * J_S_used
-#     F = Symmetric(F)  # ensure symmetric for eigen decomposition
-
-#     # eigen / spectrum
-#     eig = eigen(F)
-#     # sort descending
-#     idx = sortperm(eig.values, rev=true)
-#     evals = eig.values[idx]
-#     evecs = eig.vectors[:, idx]
-
-#     cond_est = (evals[1] / (evals[end] > 0 ? evals[end] : eps()))
-#     info = Dict(
-#         :cond => cond_est,
-#         :min_eval => evals[end],
-#         :max_eval => evals[1],
-#         :m => m,
-#         :d => d,
-#         :observable => observable,
-#         :tensor_components => tensor_components
-#     )
-
-#     return (F=F, evals=evals, evecs=evecs, J_S=J_S, info=info)
-# end
-
 function compute_FIM(Js0;
     delta=1e-3,
     backend=:lswt,
