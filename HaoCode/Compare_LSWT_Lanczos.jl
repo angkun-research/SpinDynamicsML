@@ -7,12 +7,13 @@ include("../HaoCode/triangular_nlswt.jl")
 # -----------------------------
 # User parameters
 # -----------------------------
-Js = [1.0, 0.2, 0.1, 0.0, 0.5]   # [J1, Δ, Jpmpm, Jzpm, J2]
+#Js = [1.0, 0.2, 0.1, 0.0, 0.5]   # [J1, Δ, Jpmpm, Jzpm, J2]
+Js = [1.0, 0.7, 0.2, 0.2, 0.051]  # [J1, Delta, Jpmpm, Jzpm, J2]
 dir = [1.0, 0.0, 0.0]
 
 clustersize = (11, 11, 1)        # Hao's Lanczos cluster
 η = 0.2                            # Lorentzian broadening (meV)
-energy_min, energy_max = 0.0, 20.0
+energy_min, energy_max = 0.0, 8.0
 energy_step = 0.01
 energies = collect(energy_min:energy_step:energy_max)
 
@@ -92,7 +93,7 @@ with_theme(theme_latexfonts()) do
     ax = Axis(
         fig[1, 1],
         xlabel=L"(H,H,0)",
-        ylabel="Energy (meV)",
+        ylabel="E (meV)",
         #title="Sunny LSWT: S(q, \omega)",
         xlabelsize=24,
         ylabelsize=24,
@@ -102,7 +103,7 @@ with_theme(theme_latexfonts()) do
     )
     hm = heatmap!(ax, hs, energies, lswt_img; colormap=:viridis)
     ylims!(ax, energy_min, energy_max)
-    Colorbar(fig[1, 2], hm, label="Intensity")
+    Colorbar(fig[1, 2], hm, label=L"S^{LSWT}_{\perp}(\mathbf{q}, E)")
     text!(ax, 0.03, energy_max - 1.0,
           text="Js = $(round.(Js, digits=3)), B = $(round(B_sat, digits=3)) T",
           align=(:left, :top), fontsize=14, color=:white)
@@ -115,7 +116,7 @@ with_theme(theme_latexfonts()) do
     ax = Axis(
         fig[1, 1],
         xlabel=L"(H,H,0)",
-        ylabel="Energy (meV)",
+        ylabel=L"E (\mathrm{meV})",
         #title="Hao Lanczos: S(q, \omega)",
         xlabelsize=24,
         ylabelsize=24,
@@ -125,7 +126,7 @@ with_theme(theme_latexfonts()) do
     )
     hm = heatmap!(ax, hs, energies, lanczos_img; colormap=:viridis)
     ylims!(ax, energy_min, energy_max)
-    Colorbar(fig[1, 2], hm, label="Intensity")
+    Colorbar(fig[1, 2], hm, label=L"S^{TED}_{\perp}(\mathbf{q}, E)")
     text!(ax, 0.03, energy_max - 1.0,
           text="Js = $(round.(Js, digits=3)), B = $(round(B_sat, digits=3)) T",
           align=(:left, :top), fontsize=14, color=:white)
@@ -144,7 +145,7 @@ with_theme(theme_latexfonts()) do
     ax = Axis(
         fig[1, 1],
         xlabel=L"(H,H,0)",
-        ylabel="Energy (meV)",
+        ylabel=L"E (\mathrm{meV})",
         xlabelsize=24,
         ylabelsize=24,
         titlesize=24,
@@ -157,7 +158,7 @@ with_theme(theme_latexfonts()) do
         colorrange=(-diff_absmax, diff_absmax)
     )
     ylims!(ax, energy_min, energy_max)
-    Colorbar(fig[1, 2], hm, label="Δ Intensity (LSWT - Lanczos)")
+    Colorbar(fig[1, 2], hm, label=L"\Delta S_{\perp} (\mathrm{LSWT} - \mathrm{Lanczos})")
     text!(ax, 0.03, energy_max - 1.0,
           text="Js = $(round.(Js, digits=3)), B = $(round(B_sat, digits=3)) T",
           align=(:left, :top), fontsize=14, color=:white)

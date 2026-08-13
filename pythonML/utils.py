@@ -46,7 +46,7 @@ def pick_best_device(min_free_gb=10.0):
     print(f"Selecting GPU {best_gpu}")
     return torch.device(f"cuda:{best_gpu}")
 
-def create_heatmap(disp_mat, data_mat, Egrid=None, sigma=0.1, normalize=False):
+def create_heatmap(disp_mat, data_mat, Egrid=None, sigma=0.2, normalize=False):
     """
     disp_mat, data_mat: numpy arrays with shape (Nbands, Nq)
     returns: Egrid (1D), img (Nq x len(Egrid))
