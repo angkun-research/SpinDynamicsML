@@ -60,14 +60,14 @@ def create_heatmap(disp_mat, data_mat, Egrid=None, sigma=0.1, normalize=False):
     I_mat = data_mat.T
 
     img = np.zeros((Nq, len(Egrid)), dtype=np.float64)
-
+    normalization = 1.0 / (sigma * np.sqrt(2.0 * np.pi))
     # vectorized accumulation of Gaussians per q-point
     # for each q (row) sum contributions of all bands
     for j in range(Nq):
         E0 = E_mat[j]        # (Nbands,)
         A  = I_mat[j]        # (Nbands,)
         # broadcast to (Nbands, len(Egrid)) then sum over bands
-        contrib = A[:, None] * np.exp(-0.5 * ((Egrid[None, :] - E0[:, None]) / sigma) ** 2)
+        contrib = A[:, None] * normalization * np.exp(-0.5 * ((Egrid[None, :] - E0[:, None]) / sigma) ** 2)
         img[j, :] = contrib.sum(axis=0)
 
     if normalize:

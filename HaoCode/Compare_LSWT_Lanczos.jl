@@ -52,11 +52,13 @@ end
 function lswt_to_heatmap(disp, data, energies; η=0.2)
     nbands, nq = size(disp)
     img = zeros(Float64, nq, length(energies))
+    normalization = 1.0 / (sqrt(2π) * η)
     for iq in 1:nq
         for ib in 1:nbands
             E0 = disp[ib, iq]
             A = data[ib, iq]
-            img[iq, :] .+= A .* (η / π) ./ ((energies .- E0).^2 .+ η^2)
+            #img[iq, :] .+= A .* (η / π) ./ ((energies .- E0).^2 .+ η^2)
+            img[iq, :] .+= A .* normalization .* exp.(-0.5 * ((energies .- E0) ./ η).^2)
         end
     end
     return img
