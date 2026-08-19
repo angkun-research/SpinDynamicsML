@@ -175,7 +175,7 @@ def train(
         optimizer.step()
 
         last_loss = loss
-        last_recon = loss_recon
+        last_recon = loss_recon / mag_recon_loss
         last_latent = loss_latent
         last_mse = loss_mse
         last_rel = rel_loss
@@ -266,6 +266,7 @@ def test(
 
     test_loss /= n_batches
     test_recon /= n_batches
+    test_recon /= mag_recon_loss
     test_latent /= n_batches
     test_mse /= n_batches
     test_rel /= n_batches
