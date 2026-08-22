@@ -232,6 +232,7 @@ def test(
     test_var_mean = 0.0
     test_mse = 0.0
     n_batches = 0
+    test_var_values = []
 
     with torch.no_grad():
         for data, target in tqdm(dataloader, desc="Testing"):
@@ -262,6 +263,9 @@ def test(
             test_rel += rel_loss.item()
             if var_mean is not None:
                 test_var_mean += var_mean.item()
+                test_var_values.append(
+                    out_dict["var"].detach().reshape(-1).cpu()
+                )
             n_batches += 1
 
     test_loss /= n_batches
@@ -272,6 +276,9 @@ def test(
     test_rel /= n_batches
     if has_variance:
         test_var_mean /= n_batches
+        test_var_median = torch.cat(test_var_values).median().item()
+    else:
+        test_var_median = None
     #test_rmse = (test_rel / latent_dim / batch_size) ** 0.5  # RMSE of relative error
     test_mare = test_rel / latent_dim / batch_size
     test_mse = test_mse / latent_dim / batch_size
@@ -294,6 +301,7 @@ def test(
         "test_mse": test_mse,
         "test_rel": test_rel,
         "test_var_mean": test_var_mean if has_variance else None,
+        "test_var_median": test_var_median,
         "test_mare": test_mare,
     }
     return all_out_dict
