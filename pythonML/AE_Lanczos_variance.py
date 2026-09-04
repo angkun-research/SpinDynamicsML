@@ -70,6 +70,41 @@ def load_raw_data(csv_path):
     y[:, 1] *= y[:, 0]
     return X, y
 
+def load_raw_data_gmm(csv_path, n_comp=1, n_e=20, num_J = 4):
+    df = pd.read_csv(csv_path)
+    for col in ['means', 'variances', 'weights', 'Js']:
+        df[col] = df[col].apply(json.loads)
+    means = np.array(df['means'].tolist(), dtype=np.float32)       # (N, Nk*n_pts)
+    variances = np.array(df['variances'].tolist(), dtype=np.float32)
+    weights = np.array(df['weights'].tolist(), dtype=np.float32)
+    y = np.array(df['Js'].tolist(), dtype=np.float32)
+    print(f"Total samples: {len(df)}")
+
+    if num_J == 4:
+        y = np.delete(y, 3, axis=1)   # remove 4th column (0-based index), shape becomes (N, 4)
+
+    N = len(df)
+    n_k = means.shape[1] // n_comp // n_e
+    # flat layout is k-major, n_pts-minor -> (N, n_k, n_pts)
+    means_r = means.reshape(N, n_k, n_comp, n_e)
+    variances_r = variances.reshape(N, n_k, n_comp, n_e)
+    weights_r = weights.reshape(N, n_k, n_comp, n_e)
+
+    # move n_pts before n_k so sequence dim (q-points) is last, matching old disp_ch/data_ch layout
+    means_ch = np.transpose(means_r, (0, 2, 3, 1)).reshape(N, n_comp * n_e, n_k)       # (N, n_comp * n_e, n_k)
+    variances_ch = np.transpose(variances_r, (0, 2, 3, 1)).reshape(N, n_comp * n_e, n_k)
+    weights_ch = np.transpose(weights_r, (0, 2, 3, 1)).reshape(N, n_comp * n_e, n_k)
+
+    X = np.concatenate([means_ch, variances_ch, weights_ch], axis=1)  # (N, 3*n_pts, n_k)
+    mask = (y != 0).all(axis=1)
+    X = X[mask]
+    y = y[mask]
+    print(f"Filtered samples: {len(y)}")
+    print(f"X shape: {X.shape}, y shape: {y.shape}")
+
+    y[:, 1] *= y[:, 0]
+    return X, y
+
 X, y = load_raw_data(CSV_PATH)
 X_mean, X_std = fit_standardizer(X)
 X_noisy = apply_standardizer(add_bandwidth_noise(X, sigma, seed=1234), X_mean, X_std)
