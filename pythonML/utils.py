@@ -103,7 +103,7 @@ def fit_standardizer(X_train_raw):
 def apply_standardizer(X, X_mean, X_std):
     return (X - X_mean) / X_std
 
-def add_bandwidth_noise(X, sigma, seed=1234):
+def add_bandwidth_noise(X, sigma, seed=1234, noise_type='default'):
     rng = np.random.default_rng(seed)
     eps = rng.normal(0.0, 1.0, size=X.shape).astype(np.float32)
 
@@ -111,11 +111,17 @@ def add_bandwidth_noise(X, sigma, seed=1234):
     min_vals = X.min(axis=2, keepdims=True)
     bandwidth = max_vals - min_vals
 
-    # Treat second half (intensity channels) as max-based bandwidth
-    c_half = X.shape[1] // 2
-    bandwidth[:, c_half:, :] = max_vals[:, c_half:, :]
+    if noise_type == 'default':
+        # Treat second half (intensity channels) as max-based bandwidth
+        c_half = X.shape[1] // 2
+        bandwidth[:, c_half:, :] = max_vals[:, c_half:, :]
+    elif noise_type == 'gmm':
+        # Treat the gaussian weight with no noise
+        c_23 = 2 * X.shape[1] // 3
+        bandwidth[:, c_23:, :] = 0
 
     return X + sigma * bandwidth * eps
+    
 
 def make_dataset(X, y):
     return TensorDataset(

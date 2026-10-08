@@ -207,14 +207,14 @@ S_gmm_recon = reconstruct_gmm(energies, μ_gmm, σ_gmm, A_gmm)
 # -----------------------------
 p1 = plot(energies, S_full;
     label = "Full", color = :royalblue, linewidth = 3,
-    title = "Adaptive knots (greedy interpolation)",
+    title = "Linear adaptive knots",
     xlabel = L"\omega\ \mathrm{(meV)}", ylabel = L"I(\mathbf{k}=\Gamma, \omega)",
     xlims = (0, 15), legend = :topright, guidefontsize = 14, titlefontsize = 12)
 scatter!(p1, E_adapt, S_adapt; label = "Knots (N=$N_knots)", color = :crimson, markersize = 4)
 
 p2 = plot(energies, S_full;
     label = "Full", color = :royalblue, linewidth = 3,
-    title = "Gaussian mixture (flexible weight π_k=1/N)",
+    title = "Gaussian mixture model",
     xlabel = L"\omega\ \mathrm{(meV)}", ylabel = L"I(\mathbf{k}=\Gamma, \omega)",
     xlims = (0, 15), legend = :topright, guidefontsize = 14, titlefontsize = 12)
 plot!(p2, energies, S_gmm_recon; label = "GMM reconstruction", color = :darkorange, linewidth = 2, linestyle = :dash)
@@ -222,5 +222,5 @@ scatter!(p2, μ_gmm, A_gmm ./ (σ_gmm .* sqrt(2π)); label = "Component means (N
 
 fig = plot(p1, p2; layout = (1, 2), size = (900, 400),margin = 6mm)
 
-# savefig(fig, "./plots/GMM_vs_AdaptiveKnots.pdf")
-# println("Saved: ./plots/GMM_vs_AdaptiveKnots.pdf")
+savefig(fig, "./plots/GMM_vs_AdaptiveKnots.pdf")
+println("Saved: ./plots/GMM_vs_AdaptiveKnots.pdf")

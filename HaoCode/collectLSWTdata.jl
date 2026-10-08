@@ -3,6 +3,8 @@ using Sunny, DataFrames, CSV, JLD2
 #using Plots
 using ProgressBars
 
+include("../HaoCode/triangular_nlswt.jl")
+
 # We polarize the system along the x direction to be consistent with KYbSe₂ experiments
 function polarize_system!(sys)
     for i in CartesianIndices(sys.dipoles)
@@ -69,9 +71,9 @@ end
 #     end
 # end
 
-Jsize = 5 #4
-N_uniform = 20 #30
-Nk = 20
+Jsize = 4
+N_uniform = 30
+Nk = 12
 Nsamples = 2*N_uniform^(Jsize-1)
 Js_all = Vector{Float64}[]
 for J10 in [-1,1]
@@ -104,27 +106,51 @@ for J10 in [-1,1]
         end
     end
 end
-B_same = 60
-results = DataFrame(Js=Vector{Float64}[], data=Vector{Float64}[], disp=Vector{Float64}[])
 
+
+# results = DataFrame(Js=Vector{Float64}[], data=Vector{Float64}[], disp=Vector{Float64}[])
+# B_same = 60
+
+# # Uniformly sample Js from the Jsize dimensional space with each J in range -1 to 1
+# for taskid in ProgressBar(1:Nsamples)
+#     Js = Js_all[taskid]
+#     res = Run_LSWT(Js, B_same; dims=(1, 1, 1),Nk=Nk)
+#     if Jsize == 4
+#         Js = Js[[1, 2, 3, 5]]
+#     end
+#     push!(results, (
+#         copy(Js), # only keep J1, Δ, J1pmpm, J2
+#         vec(res.data),
+#         vec(res.disp),
+#     ))
+# end
+
+results = DataFrame(Js=Vector{Float64}[], data=Vector{Float64}[], disp=Vector{Float64}[], B_sat=Float64[])
 # Uniformly sample Js from the Jsize dimensional space with each J in range -1 to 1
 for taskid in ProgressBar(1:Nsamples)
     Js = Js_all[taskid]
-    res = Run_LSWT(Js, B_same; dims=(1, 1, 1),Nk=Nk)
-    if Jsize == 4
-        Js = Js[[1, 2, 3, 5]]
+    B_sat, _ = determine_B_sat(Js, [1.0, 0.0, 0.0])
+    B_sat = B_sat * 1.1
+    try
+        res = Run_LSWT(Js, B_sat; dims=(1, 1, 1),Nk=Nk)
+        if Jsize == 4
+            Js = Js[[1, 2, 3, 5]]
+        end
+        push!(results, (
+            copy(Js), # only keep J1, Δ, J1pmpm, J2
+            vec(res.data),
+            vec(res.disp),
+            copy(B_sat)
+        ))
+    catch _
+        println("Error occurred for taskid: $taskid")
     end
-    push!(results, (
-        copy(Js), # only keep J1, Δ, J1pmpm, J2
-        vec(res.data),
-        vec(res.disp),
-    ))
 end
 
-
 #CSV.write("data/HaoResults/Hao_anisotropy_Js4_Bdep_Nk100.csv", results)
-CSV.write("data/triangular_anisotropy_uniform_Js$(Jsize)_B$(B_same)_Nk$(Nk)_NJ$(N_uniform).csv", results)
-println("saved results to data/triangular_anisotropy_uniform_Js$(Jsize)_B$(B_same)_Nk$(Nk)_NJ$(N_uniform).csv")
+#CSV.write("data/triangular_anisotropy_uniform_Js$(Jsize)_B$(B_same)_Nk$(Nk)_NJ$(N_uniform).csv", results)
+CSV.write("data/triangular_anisotropy_uniform_Js$(Jsize)_Bdep_Nk$(Nk)_NJ$(N_uniform).csv", results)
+println("saved results to data")
 
 # # read back the data
 # results = CSV.read("data/triangular_heisenberg_Js10_h20.csv", DataFrame)

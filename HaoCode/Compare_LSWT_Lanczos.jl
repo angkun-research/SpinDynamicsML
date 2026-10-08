@@ -8,7 +8,8 @@ include("../HaoCode/triangular_nlswt.jl")
 # User parameters
 # -----------------------------
 #Js = [1.0, 0.2, 0.1, 0.0, 0.5]   # [J1, Δ, Jpmpm, Jzpm, J2]
-Js = [1.0, 0.7, 0.2, 0.2, 0.051]  # [J1, Delta, Jpmpm, Jzpm, J2]
+#Js = [1.0, 0.7, 0.2, 0.2, 0.051]  # [J1, Delta, Jpmpm, Jzpm, J2]
+Js = [1.0, 0.7, 0.2, 0.0, 0.051] 
 dir = [1.0, 0.0, 0.0]
 
 clustersize = (11, 11, 1)        # Hao's Lanczos cluster
