@@ -14,7 +14,7 @@ function Run_LSWT(Js,B; dims = (1,1,1),Nk=12, observable=:perp)
     latvecs = lattice_vectors(a, a, c, 90, 90, 120)
     positions = [[0, 0, 0]]
     cryst = Crystal(latvecs, positions, 162)
-    qs = [[0, 0, 0], [1, 1, 0]]
+    qs = [[0, 0, 0], [1, 1, 0]] #[[0, 0, 5], [1, 1, 5]]#[[0, 0, 0], [1, 1, 0]]
     path = q_space_path(cryst,qs,Nk)
 
     # g-tensor for KYbSe₂
@@ -223,7 +223,7 @@ println("Computing FIM at J0 = ", J0)
 observable = :perp #:tensor #:perp
 println("Observable: ", observable)
 tensor_components = :sym6
-backend = :lanczos #:lswt #:lanczos
+backend = :lswt #:lanczos
 println("Backend: ", backend)
 res = compute_FIM(J0; backend=backend, delta=1e-3, B=60, Nk=200, observable=observable, tensor_components=tensor_components)
 println("Eigenvalues (desc): ", res.evals)
