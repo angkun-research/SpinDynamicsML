@@ -73,6 +73,7 @@ end
 Js = [1.0, -0.368421, -1.0, 0.0, 0.473684]  # [J1, Delta, Jpmpm, Jzpm, J2]
 dir = [1.0, 0.0, 0.0]
 
+fwhm = 0.8
 clustersize = (11, 11, 1)
 eta = 0.1
 energy_min, energy_max = 0.0, 15.0
@@ -92,13 +93,85 @@ function run_lanczos_dssf(Js, dir, clustersize, energies, eta; B=nothing)
     return B_used, qs_path, scalar_img
 end
 
+function run_lswt(Js, B; field_dir=[1.0, 0.0, 0.0], dims=(1, 1, 1), nqp=12)
+    J1, Δ, Jpmpm, Jzpm, J2 = Js
+    units = Units(:meV, :angstrom)
+
+    a = 4.1149
+    c = 22.6911
+    latvecs = lattice_vectors(a, a, c, 90, 90, 120)
+    cryst = Crystal(latvecs, [[0, 0, 0]], 162)
+
+    qs = [[0, 0, 0], [1, 1, 0]]
+    path = q_space_path(cryst, qs, nqp)
+
+    gab, gcc = 3.13 * 1.09310, 1.01
+    gtens = [gab 0 0; 0 gab 0; 0 0 gcc]
+    sys = System(cryst, [1 => Moment(s=1 / 2, g=gtens)], :dipole; dims=dims)
+
+    J1_ten = [J1 + 2Jpmpm  0             Jzpm;
+              0            J1 - 2Jpmpm   0;
+              Jzpm         0             J1 * Δ]
+
+    set_exchange!(sys, J1_ten, Bond(1, 1, [1, 0, 0]))
+    set_exchange!(sys, J2, Bond(1, 1, [1, 2, 0]))
+    set_field!(sys, B * units.T * field_dir)
+
+    polarize_system!(sys, -field_dir)
+    swt = SpinWaveTheory(sys; measure=ssf_perp(sys))
+    res = intensities_bands(swt, path)
+    return (vec(res.disp), vec(res.data), path)
+end
+
+function broaden_lswt_peaks(disp, intensities; fwhm=0.8, n_sigma_padding=6.0)
+    #fwhm = 0.8
+    sigma = fwhm / (2 * sqrt(2 * log(2)))
+    energy_step = 0.01
+    # n_sigma_padding = 6.0
+
+    energy_min = minimum(disp) - n_sigma_padding * sigma
+    energy_max = maximum(disp) + n_sigma_padding * sigma
+    energies = collect(energy_min:energy_step:energy_max)
+    gauss(x, mu, sigma) = exp(-0.5 * ((x - mu) / sigma)^2) / (sigma * sqrt(2 * pi))
+    inten_mat = zeros(length(energies), length(disp))
+    for i in eachindex(disp)
+        for j in eachindex(energies)
+            inten_mat[j, i] = intensities[i] * gauss(energies[j], disp[i], sigma)
+        end
+    end
+    # transpose to match the expected output format
+    inten_mat = inten_mat'
+    return energies,inten_mat
+end
+
+function fit_single_gaussian(energies, intensity_mat)
+    dE = energies[2] - energies[1]  # assuming uniform spacing
+    weights = max.(intensity_mat, 0.0)
+    # intensity_mat is length(disp) \times length(energies)
+    N_p, N_E = size(intensity_mat)
+    disp_new = zeros(N_p)
+    inten_new = zeros(N_p)
+    for i in 1:N_p
+        mean_temp = sum(weights[i, :] .* energies) / sum(weights[i, :])
+        variance_temp = sum(weights[i, :] .* (energies .- mean_temp).^2) / sum(weights[i, :])
+        sigma_temp = sqrt(variance_temp)
+        disp_new[i] = mean_temp
+        total_int = sum(weights[i, :]) * dE
+        inten_new[i] = total_int / (sigma_temp * sqrt(2 * pi))
+    end
+    return disp_new, inten_new
+end
+
 B_sat, _ = determine_B_sat(Js, dir)
 B = B_sat * 1.1
+
 B1, qs1, scalar1 = run_lanczos_dssf(Js, dir, clustersize, energies, eta; B=B)
 # Instrumental Gaussian broadening
-fwhm = 0.8
 scalar1 = gaussian_broaden(scalar1, energies; fwhm = fwhm)
 
+disp, inten, path = run_lswt(Js, B)
+energies, scalar1 = broaden_lswt_peaks(disp, inten; fwhm=fwhm)
+#inten_mat_fitted_disp, inten_mat_fitted_inten = fit_single_gaussian(disp, scalar1)
 
 T = 100
 scalar_poisson_1 = PoissonCountIntensity(scalar1, T)
@@ -119,6 +192,12 @@ plot(energies, scalar1[1, :]; label = "Original Scalar Intensity", linewidth = 2
 scatter!(energies, scalar_poisson_1[1, :]; label = "Poisson Count (T=100)", linewidth = 2)
 scatter!(energies, scalar_poisson_2[1, :]; label = "Poisson Count (T=1000)", linewidth = 2)
 scatter!(energies, scalar_poisson_3[1, :]; label = "Poisson Count (T=100000)", linewidth = 2)
+
+disp_new, inten_new = fit_single_gaussian(energies, scalar_poisson_3)
+plot(disp; label = "Original Scalar Intensity", linewidth = 2)
+plot!(disp_new; label = "Fitted Gaussian", linewidth = 2)
+
+plot([inten inten_new])
 
 S_full = scalar_poisson_2[1, :]   # Γ-point curve, same one used in Plot_interpolation.jl
 
