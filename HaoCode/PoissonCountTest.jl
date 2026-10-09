@@ -146,25 +146,25 @@ end
 
 function fit_single_gaussian(energies, intensity_mat)
     dE = energies[2] - energies[1]  # assuming uniform spacing
-    weights = max.(intensity_mat, 0.0)
+    weights = intensity_mat #max.(intensity_mat, 0.0)
     # intensity_mat is length(disp) \times length(energies)
     N_p, N_E = size(intensity_mat)
     disp_new = zeros(N_p)
     inten_new = zeros(N_p)
     for i in 1:N_p
         mean_temp = sum(weights[i, :] .* energies) / sum(weights[i, :])
-        variance_temp = sum(weights[i, :] .* (energies .- mean_temp).^2) / sum(weights[i, :])
-        sigma_temp = sqrt(variance_temp)
+        # variance_temp = sum(weights[i, :] .* (energies .- mean_temp).^2) / sum(weights[i, :])
+        # sigma_temp = sqrt(variance_temp)
         disp_new[i] = mean_temp
         total_int = sum(weights[i, :]) * dE
-        inten_new[i] = total_int / (sigma_temp * sqrt(2 * pi))
+        inten_new[i] = total_int #/ (sigma_temp * sqrt(2 * pi))
     end
     return disp_new, inten_new
 end
 
 function fit_gmm_full(ω, S; N=10, n_iter=200, tol=1e-10)
     Δω = ω[2] - ω[1]
-    w = max.(S, 0.0)
+    w = S #max.(S, 0.0)
     wsum = sum(w)
     @assert wsum > 0 "signal has no positive mass"
     p = w ./ wsum
@@ -260,8 +260,8 @@ scatter!(energies, scalar_poisson_1[1, :]; label = "Poisson Count (T=100)", line
 scatter!(energies, scalar_poisson_2[1, :]; label = "Poisson Count (T=1000)", linewidth = 2)
 scatter!(energies, scalar_poisson_3[1, :]; label = "Poisson Count (T=100000)", linewidth = 2)
 
-#disp_new, inten_new = fit_single_gaussian(energies, scalar_poisson_3)
-disp_new, inten_new = fit_all_qs(energies, scalar_poisson_3) # same as fit_single_gaussian for N=1
+disp_new, inten_new = fit_single_gaussian(energies, scalar_poisson_1)
+#disp_new, inten_new = fit_all_qs(energies, scalar_poisson_1) # same as fit_single_gaussian for N=1
 plot(disp; label = "Original Scalar Intensity", linewidth = 2)
 plot!(disp_new; label = "Fitted Gaussian", linewidth = 2)
 
