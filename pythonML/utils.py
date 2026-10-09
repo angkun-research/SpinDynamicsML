@@ -161,9 +161,10 @@ def add_poisson_noise_lswt(X, T=100, fwhm=0.8, bgrate=1.0, seed=1234):
             * np.exp(-0.5 * (offset / sigma) ** 2)
             / (sigma * np.sqrt(2 * np.pi))
         )
-        weights = np.maximum(
-            rng.poisson((signal + bgrate) * T) / T - bgrate, 0
-        )
+        # weights = np.maximum(
+        #     rng.poisson((signal + bgrate) * T) / T - bgrate, 0
+        # )
+        weights = rng.poisson((signal + bgrate) * T) / T - bgrate
 
         # N=1 Gaussian moment fit; intensity is integrated area.
         mass = weights.sum(axis=1)
@@ -171,7 +172,7 @@ def add_poisson_noise_lswt(X, T=100, fwhm=0.8, bgrate=1.0, seed=1234):
             (weights * offset).sum(axis=1),
             mass,
             out=np.zeros_like(mass),
-            where=mass > 0,
+            where=mass != 0,
         )
         output[i, 0] = disp + shift
         output[i, 1] = mass * dE

@@ -53,4 +53,6 @@ fig.suptitle(
     f"LSWT sample {SAMPLE_INDEX}, Js = {Js[SAMPLE_INDEX].tolist()}"
 )
 fig.tight_layout()
-plt.show()
+OUTPUT_PATH = f"./plots/Poisson_noise_sample_{SAMPLE_INDEX}.png"
+plt.savefig(OUTPUT_PATH, bbox_inches="tight")
+plt.close()
