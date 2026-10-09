@@ -104,7 +104,13 @@ def apply_standardizer(X, X_mean, X_std):
     return (X - X_mean) / X_std
 
 def add_bandwidth_noise(X, sigma, seed=1234, noise_type='default'):
+    if sigma <= 0.0:
+        return X
     rng = np.random.default_rng(seed)
+
+    if noise_type == 'poisson':
+        return add_poisson_noise_lswt(X, T=1/sigma, seed=seed)
+
     eps = rng.normal(0.0, 1.0, size=X.shape).astype(np.float32)
 
     max_vals = X.max(axis=2, keepdims=True)
