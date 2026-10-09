@@ -128,3 +128,52 @@ def make_dataset(X, y):
         torch.from_numpy(X.astype(np.float32)),
         torch.from_numpy(y.astype(np.float32)),
     )
+
+def add_poisson_noise_lswt(X, T=100, fwhm=0.8, bgrate=1.0, seed=1234):
+    """Broaden → Poisson noise → single-Gaussian moment fit for LSWT data."""
+
+    X = np.asarray(X)
+    if X.ndim != 3 or X.shape[1] != 2:
+        raise ValueError("X must have shape (N, 2, Nq): dispersion, intensity.")
+    if not all(np.isfinite(v) for v in (T, fwhm, bgrate)):
+        raise ValueError("Noise parameters must be finite.")
+    if T <= 0 or fwhm <= 0 or bgrate < 0:
+        raise ValueError("Require T > 0, fwhm > 0, and bgrate >= 0.")
+    if not np.isfinite(X).all() or np.any(X[:, 1] < 0):
+        raise ValueError("X must be finite with nonnegative intensities.")
+
+    rng = np.random.default_rng(seed)
+    sigma = fwhm / np.sqrt(8 * np.log(2))
+    dE = 0.01
+    output = np.empty(X.shape, dtype=np.float32)
+
+    for i, sample in enumerate(X):
+        disp, inten = sample.astype(np.float64, copy=False)
+        emin = disp.min() - 6 * sigma
+        emax = disp.max() + 6 * sigma
+        energies = emin + dE * np.arange(
+            int(np.floor((emax - emin) / dE)) + 1
+        )
+
+        offset = energies[None, :] - disp[:, None]
+        signal = (
+            inten[:, None]
+            * np.exp(-0.5 * (offset / sigma) ** 2)
+            / (sigma * np.sqrt(2 * np.pi))
+        )
+        weights = np.maximum(
+            rng.poisson((signal + bgrate) * T) / T - bgrate, 0
+        )
+
+        # N=1 Gaussian moment fit; intensity is integrated area.
+        mass = weights.sum(axis=1)
+        shift = np.divide(
+            (weights * offset).sum(axis=1),
+            mass,
+            out=np.zeros_like(mass),
+            where=mass > 0,
+        )
+        output[i, 0] = disp + shift
+        output[i, 1] = mass * dE
+
+    return output

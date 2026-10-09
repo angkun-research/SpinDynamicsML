@@ -162,12 +162,79 @@ function fit_single_gaussian(energies, intensity_mat)
     return disp_new, inten_new
 end
 
+function fit_gmm_full(ω, S; N=10, n_iter=200, tol=1e-10)
+    Δω = ω[2] - ω[1]
+    w = max.(S, 0.0)
+    wsum = sum(w)
+    @assert wsum > 0 "signal has no positive mass"
+    p = w ./ wsum
+
+    cumw = cumsum(p)
+    μ = [ω[searchsortedfirst(cumw, q)] for q in range(1/(2N), 1 - 1/(2N); length=N)]
+    span = maximum(ω) - minimum(ω)
+    σ = fill(span / (2N), N)
+    π_k = fill(1.0 / N, N)
+
+    n = length(ω)
+    r = zeros(n, N)
+    prev_ll = -Inf
+
+    for _ in 1:n_iter
+        for i in 1:n
+            tot = 0.0
+            for k in 1:N
+                r[i, k] = π_k[k] * gauss(ω[i], μ[k], σ[k])
+                tot += r[i, k]
+            end
+            tot = max(tot, 1e-300)
+            @views r[i, :] ./= tot
+        end
+
+        for k in 1:N
+            wk = p .* @view r[:, k]
+            Nk = sum(wk)
+            π_k[k] = Nk
+            Nk < 1e-12 && continue
+            μ[k] = sum(wk .* ω) / Nk
+            σ2 = sum(wk .* (ω .- μ[k]) .^ 2) / Nk
+            σ[k] = sqrt(max(σ2, 1e-6))
+        end
+        π_k ./= sum(π_k)
+
+        ll = 0.0
+        for i in 1:n
+            s = 0.0
+            for k in 1:N
+                s += π_k[k] * gauss(ω[i], μ[k], σ[k])
+            end
+            ll += p[i] * log(max(s, 1e-300))
+        end
+        abs(ll - prev_ll) < tol && break
+        prev_ll = ll
+    end
+
+    A = π_k .* wsum .* Δω
+    return μ, σ, A, π_k
+end
+
+function fit_all_qs(energies, intensity_mat)
+    N_q, N_E = size(intensity_mat)
+    disp_new = zeros(N_q)
+    inten_new = zeros(N_q)
+    for i in 1:N_q
+        μ, σ, A, π_k = fit_gmm_full(energies, intensity_mat[i, :]; N=1)
+        disp_new[i] = μ[1]
+        inten_new[i] = A[1]
+    end
+    return disp_new, inten_new
+end
+
 B_sat, _ = determine_B_sat(Js, dir)
 B = B_sat * 1.1
 
-B1, qs1, scalar1 = run_lanczos_dssf(Js, dir, clustersize, energies, eta; B=B)
-# Instrumental Gaussian broadening
-scalar1 = gaussian_broaden(scalar1, energies; fwhm = fwhm)
+# B1, qs1, scalar1 = run_lanczos_dssf(Js, dir, clustersize, energies, eta; B=B)
+# # Instrumental Gaussian broadening
+# scalar1 = gaussian_broaden(scalar1, energies; fwhm = fwhm)
 
 disp, inten, path = run_lswt(Js, B)
 energies, scalar1 = broaden_lswt_peaks(disp, inten; fwhm=fwhm)
@@ -193,7 +260,8 @@ scatter!(energies, scalar_poisson_1[1, :]; label = "Poisson Count (T=100)", line
 scatter!(energies, scalar_poisson_2[1, :]; label = "Poisson Count (T=1000)", linewidth = 2)
 scatter!(energies, scalar_poisson_3[1, :]; label = "Poisson Count (T=100000)", linewidth = 2)
 
-disp_new, inten_new = fit_single_gaussian(energies, scalar_poisson_3)
+#disp_new, inten_new = fit_single_gaussian(energies, scalar_poisson_3)
+disp_new, inten_new = fit_all_qs(energies, scalar_poisson_3) # same as fit_single_gaussian for N=1
 plot(disp; label = "Original Scalar Intensity", linewidth = 2)
 plot!(disp_new; label = "Fitted Gaussian", linewidth = 2)
 
