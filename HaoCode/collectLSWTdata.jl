@@ -12,7 +12,7 @@ function polarize_system!(sys)
     end
 end
 
-function Run_LSWT(Js,B; dims = (1,1,1),Nk=12)
+function Run_LSWT(Js,B; dims = (1,1,1),Nk=12, QZ=0)
     J1, Δ, Jpmpm, Jzpm, J2 = Js
     units = Units(:meV, :angstrom)
     a = 4.1149
@@ -20,7 +20,7 @@ function Run_LSWT(Js,B; dims = (1,1,1),Nk=12)
     latvecs = lattice_vectors(a, a, c, 90, 90, 120)
     positions = [[0, 0, 0]]
     cryst = Crystal(latvecs, positions, 162)
-    qs = [[0, 0, 0], [1, 1, 0]]
+    qs = [[0, 0, QZ], [1, 1, QZ]]
     path = q_space_path(cryst,qs,Nk)
 
     # g-tensor for KYbSe₂
@@ -71,9 +71,9 @@ end
 #     end
 # end
 
-Jsize = 4
-N_uniform = 30
-Nk = 12
+Jsize = 4 #5 #4
+N_uniform = 20 #30
+Nk = 20 #12
 Nsamples = 2*N_uniform^(Jsize-1)
 Js_all = Vector{Float64}[]
 for J10 in [-1,1]
@@ -108,48 +108,49 @@ for J10 in [-1,1]
 end
 
 
-# results = DataFrame(Js=Vector{Float64}[], data=Vector{Float64}[], disp=Vector{Float64}[])
-# B_same = 60
-
-# # Uniformly sample Js from the Jsize dimensional space with each J in range -1 to 1
-# for taskid in ProgressBar(1:Nsamples)
-#     Js = Js_all[taskid]
-#     res = Run_LSWT(Js, B_same; dims=(1, 1, 1),Nk=Nk)
-#     if Jsize == 4
-#         Js = Js[[1, 2, 3, 5]]
-#     end
-#     push!(results, (
-#         copy(Js), # only keep J1, Δ, J1pmpm, J2
-#         vec(res.data),
-#         vec(res.disp),
-#     ))
-# end
-
-results = DataFrame(Js=Vector{Float64}[], data=Vector{Float64}[], disp=Vector{Float64}[], B_sat=Float64[])
+results = DataFrame(Js=Vector{Float64}[], data=Vector{Float64}[], disp=Vector{Float64}[])
+B_same = 60
+QZ = 0
 # Uniformly sample Js from the Jsize dimensional space with each J in range -1 to 1
 for taskid in ProgressBar(1:Nsamples)
     Js = Js_all[taskid]
-    B_sat, _ = determine_B_sat(Js, [1.0, 0.0, 0.0])
-    B_sat = B_sat * 1.1
-    try
-        res = Run_LSWT(Js, B_sat; dims=(1, 1, 1),Nk=Nk)
-        if Jsize == 4
-            Js = Js[[1, 2, 3, 5]]
-        end
-        push!(results, (
-            copy(Js), # only keep J1, Δ, J1pmpm, J2
-            vec(res.data),
-            vec(res.disp),
-            copy(B_sat)
-        ))
-    catch _
-        println("Error occurred for taskid: $taskid")
+    res = Run_LSWT(Js, B_same; dims=(1, 1, 1),Nk=Nk, QZ=QZ)
+    if Jsize == 4
+        Js = Js[[1, 2, 3, 5]]
     end
+    push!(results, (
+        copy(Js), # only keep J1, Δ, J1pmpm, J2
+        vec(res.data),
+        vec(res.disp),
+    ))
 end
 
+# results = DataFrame(Js=Vector{Float64}[], data=Vector{Float64}[], disp=Vector{Float64}[], B_sat=Float64[])
+# # Uniformly sample Js from the Jsize dimensional space with each J in range -1 to 1
+# for taskid in ProgressBar(1:Nsamples)
+#     Js = Js_all[taskid]
+#     B_sat, _ = determine_B_sat(Js, [1.0, 0.0, 0.0])
+#     B_sat = B_sat * 1.1
+#     try
+#         res = Run_LSWT(Js, B_sat; dims=(1, 1, 1),Nk=Nk)
+#         if Jsize == 4
+#             Js = Js[[1, 2, 3, 5]]
+#         end
+#         push!(results, (
+#             copy(Js), # only keep J1, Δ, J1pmpm, J2
+#             vec(res.data),
+#             vec(res.disp),
+#             copy(B_sat)
+#         ))
+#     catch _
+#         println("Error occurred for taskid: $taskid")
+#     end
+# end
+
 #CSV.write("data/HaoResults/Hao_anisotropy_Js4_Bdep_Nk100.csv", results)
-#CSV.write("data/triangular_anisotropy_uniform_Js$(Jsize)_B$(B_same)_Nk$(Nk)_NJ$(N_uniform).csv", results)
-CSV.write("data/triangular_anisotropy_uniform_Js$(Jsize)_Bdep_Nk$(Nk)_NJ$(N_uniform).csv", results)
+CSV.write("data/triangular_anisotropy_uniform_Js$(Jsize)_B$(B_same)_Nk$(Nk)_NJ$(N_uniform).csv", results)
+#CSV.write("data/triangular_anisotropy_uniform_Js$(Jsize)_Bdep_Nk$(Nk)_NJ$(N_uniform).csv", results)
+#CSV.write("data/triangular_anisotropy_uniform_Js$(Jsize)_B$(B_same)_Nk$(Nk)_NJ$(N_uniform)_QZ$(QZ).csv", results)
 println("saved results to data")
 
 # # read back the data

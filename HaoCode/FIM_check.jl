@@ -14,7 +14,8 @@ function Run_LSWT(Js,B; dims = (1,1,1),Nk=12, observable=:perp)
     latvecs = lattice_vectors(a, a, c, 90, 90, 120)
     positions = [[0, 0, 0]]
     cryst = Crystal(latvecs, positions, 162)
-    qs = [[0, 0, 0], [1, 1, 0]] #[[0, 0, 5], [1, 1, 5]]#[[0, 0, 0], [1, 1, 0]]
+    QZ = 0
+    qs = [[0, 0, QZ], [1, 1, QZ]] #[[0, 0, 5], [1, 1, 5]]#[[0, 0, 0], [1, 1, 0]]
     path = q_space_path(cryst,qs,Nk)
 
     # g-tensor for KYbSe₂
@@ -218,7 +219,7 @@ println("FIM_identifiability.jl — example run")
     # Example 4-parameter anisotropy point (adjust to your model dimensionality)
 #J0 = [1.0, 0.9, 0.1, 0.05, 0.2]   # length d must match your Run_LSWT expectation slice
 #J0 = [1.0, 0.9, 0.1, 0.2]
-J0 = [1.0,0.2,0.1,0.05, 0.5]
+J0 = [1.0,0.2,0.1,0.5] #[1.0,0.2,0.1,0.05, 0.5]
 println("Computing FIM at J0 = ", J0)
 observable = :perp #:tensor #:perp
 println("Observable: ", observable)
