@@ -188,7 +188,7 @@ On the nearest-neighbor bond, the 3×3 exchange tensor is given by:
 
 On the next-nearest-neighbor bond, the exchange is isotropic with strength J2.
 """
-function triangular_nlswt_lanczos_calculations(Js, clustersize, dir; B=nothing, opts...)
+function triangular_nlswt_lanczos_calculations(Js, clustersize, dir; B=nothing, Qz=0, opts...)
     units = Units(:meV, :angstrom)
 
     B_sat, sys_min = determine_B_sat(Js, dir; opts...)
@@ -206,7 +206,7 @@ function triangular_nlswt_lanczos_calculations(Js, clustersize, dir; B=nothing, 
     try
         npt = Sunny.NonPerturbativeTheory(swt, clustersize)
         # Let's focus on the [H,H,0] path
-        qs = [[0, 0, 0], [1, 1, 0]]
+        qs = [[0, 0, Qz], [1, 1, Qz]]
         path = Sunny.q_space_path_npt(npt, qs)
         niters = 1000
         atol = 1e-5
