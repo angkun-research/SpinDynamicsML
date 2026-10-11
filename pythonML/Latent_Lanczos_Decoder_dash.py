@@ -6,15 +6,16 @@ import torch
 from dash import Dash, dcc, html, Input, Output
 import plotly.graph_objects as go
 
-# import sys
-# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from AutoEncoderClassNew import Conv1Dminimal
-from utils import create_heatmap
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from pythonML.AutoEncoderClassNew import Conv1Dminimal
+from pythonML.utils import create_heatmap
 
 # -----------------------
 # Config
 # -----------------------
-CKPT_PATH = "./data/ConvChannel_anisotropy_Lanczos_Js4_Nk12_Ne100_sigma0.0.pth"
+#CKPT_PATH = "./data/ConvChannel_anisotropy_Lanczos_Js4_Nk12_Ne100_sigma0.0.pth"
+CKPT_PATH = "./data/ConvChannel_scalar_THED_Js4_Nk12_Ne100_sigma0.0_epoch96.pth"
 
 LATENT_DIM = 4
 HIDDEN_DIM = 64
@@ -113,20 +114,11 @@ app.layout = html.Div([
     html.H2("Interactive Latent-Space Decoder (DSSF)"),
     html.Div(slider_blocks, style={"maxWidth": "900px"}),
     html.Div(id="latent-text", style={"marginBottom": "10px", "fontFamily": "monospace"}),
-    html.Div([
-    dcc.Graph(id="dssf-graph", style={"flex": "1 1 520px", "height": "520px"}),
-    dcc.Graph(id="ie-graph", style={"flex": "1 1 520px", "height": "520px"}),
-    ], style={
-        "display": "flex",
-        "gap": "16px",
-        "alignItems": "stretch",
-        "flexWrap": "wrap",   # wraps on smaller screens
-    }),
+    dcc.Graph(id="dssf-graph"),
 ], style={"padding": "20px"})
 
 @app.callback(
     Output("dssf-graph", "figure"),
-    Output("ie-graph", "figure"),
     Output("latent-text", "children"),
     Input("z1", "value"),
     Input("z2", "value"),
@@ -155,7 +147,7 @@ def update_plots(z1, z2, z3, z4):
         x=k,
         y=Egrid,
         z=img.T,   # shape: (len(Egrid), L)
-        colorscale="Turbo",
+        colorscale="Viridis",#"Turbo",
         colorbar={"title": "I(q,ω)"},
     ))
 
@@ -167,25 +159,9 @@ def update_plots(z1, z2, z3, z4):
         height=500,
         width=600
     )
-    fig_ie = go.Figure()
-    fig_ie.add_trace(go.Scatter(
-    x=Egrid,
-    y=img[0, :], # k index 0
-    mode="lines",
-    name="I(k=0,E)",
-    line={"width": 2}
-    ))
-    fig_ie.update_layout(
-    title="Intensity vs Energy at k=(0,0)",
-    xaxis_title="Energy (meV)",
-    yaxis_title="Intensity",
-    template="plotly_white",
-    height=500,
-    width=600
-    )
 
     txt = "Current latent vector: " + np.array2string(z, precision=4, separator=", ")
-    return fig, fig_ie, txt
+    return fig, txt
 
 if __name__ == "__main__":
     app.run(debug=True)
