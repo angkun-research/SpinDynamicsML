@@ -1,8 +1,8 @@
-# SpinDynamic
+# SpinDynamicsML
 
 **Machine learning for inferring physical model parameters from noisy scattering spectra.**
 
-SpinDynamic combines Julia spin-dynamics simulations with PyTorch inverse models to recover microscopic interaction parameters from dynamical spin structure factors—the energy- and momentum-dependent spectra probed by neutron scattering. It also asks which parameters the available measurements can actually distinguish, how noise affects predictions, and how the choice of simulation model affects generalization.
+SpinDynamicsML combines Julia spin-dynamics simulations with PyTorch inverse models to recover microscopic interaction parameters from dynamical spin structure factors—the energy- and momentum-dependent spectra probed by neutron scattering. It also asks which parameters the available measurements can actually distinguish, how noise affects predictions, and how the choice of simulation model affects generalization.
 
 The workflow spans physical modeling, synthetic dataset generation, spectral preprocessing, neural-network and classical regression benchmarks, predictive uncertainty, and learned forward reconstruction.
 
