@@ -5,7 +5,7 @@ using LinearAlgebra
 using Measures
 
 # Reuse Hao's Lanczos and B_sat helpers
-include("../HaoCode/triangular_nlswt.jl")
+include("../JuliaCode/triangular_nlswt.jl")
 
 # -----------------------------
 # User parameters

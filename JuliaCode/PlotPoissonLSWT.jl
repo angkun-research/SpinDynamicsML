@@ -7,7 +7,7 @@ using Random
 using Distributions: Poisson
 
 # Reuse Hao's Lanczos and B_sat helpers
-include("../HaoCode/triangular_nlswt.jl")
+include("../JuliaCode/triangular_nlswt.jl")
 
 function PoissonCountIntensity(intensities, T; bgrate=1.0, rng::AbstractRNG = Random.default_rng())
     counts = zeros(Int64,size(intensities))

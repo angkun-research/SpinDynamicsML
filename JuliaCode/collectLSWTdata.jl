@@ -3,7 +3,7 @@ using Sunny, DataFrames, CSV, JLD2
 #using Plots
 using ProgressBars
 
-include("../HaoCode/triangular_nlswt.jl")
+include("../JuliaCode/triangular_nlswt.jl")
 
 # We polarize the system along the x direction to be consistent with KYbSe₂ experiments
 function polarize_system!(sys)

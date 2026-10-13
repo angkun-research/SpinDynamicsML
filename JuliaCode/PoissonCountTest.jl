@@ -7,8 +7,8 @@ using Random
 using Distributions: Poisson
 
 # Reuse Hao's Lanczos and B_sat helpers
-include("../HaoCode/triangular_nlswt.jl")
-include("../HaoCode/UtilDiscretizations.jl")
+include("../JuliaCode/triangular_nlswt.jl")
+include("../JuliaCode/UtilDiscretizations.jl")
 
 function gaussian_broaden(
     data::AbstractMatrix,
