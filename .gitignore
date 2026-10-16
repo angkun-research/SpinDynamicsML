@@ -7,3 +7,5 @@ pythonML/__pycache__/
 HPCtemp/
 plots/
 .claude/
+
+.vscode/

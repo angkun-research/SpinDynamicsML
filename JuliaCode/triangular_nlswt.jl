@@ -8,8 +8,9 @@ function map_lanczos_results_to_neutron_intensities(qs_path, as_path, bs_path, n
     intensities = zeros(length(qs_path), length(ωs))
 
     # The original crystal
-    a = 4.1149
-    c = 22.6911
+    # a = 4.1149
+    # c = 22.6911
+    a, c = 1, 5
     latvecs = lattice_vectors(a, a, c, 90, 90, 120)
     positions = [[0, 0, 0]]
     cryst = Crystal(latvecs, positions, 162)
@@ -75,8 +76,9 @@ function map_lanczos_results_to_dssf_tensor(qs_path, as_path, bs_path, norm2s_pa
     dssf = zeros(6, length(qs_path), length(ωs))
 
     # The original crystal
-    a = 4.1149
-    c = 22.6911
+    # a = 4.1149
+    # c = 22.6911
+    a, c = 1, 5
     latvecs = lattice_vectors(a, a, c, 90, 90, 120)
     positions = [[0, 0, 0]]
     cryst = Crystal(latvecs, positions, 162)
@@ -134,16 +136,17 @@ end
 function determine_B_sat(Js, dir; B_diff_tol=1e-2, energy_tol=1e-8, max_iters=100)
     J1, Δ, Jpmpm, Jzpm, J2 = Js
     normalize!(dir)
-    units = Units(:meV, :angstrom)
-    a = 4.1149
-    c = 22.6911
+    # units = Units(:meV, :angstrom)
+    a = 1 #4.1149
+    c = 5 #22.6911
     latvecs = lattice_vectors(a, a, c, 90, 90, 120)
     positions = [[0, 0, 0]]
     cryst = Crystal(latvecs, positions, 162)
 
     # g-tensor for KYbSe₂
-    gab, gcc = 3.13*1.09310, 1.01
-    gtens = [gab 0 0; 0 gab 0; 0 0 gcc]
+    # gab, gcc = 3.13*1.09310, 1.01
+    # gtens = [gab 0 0; 0 gab 0; 0 0 gcc]
+    gtens = 1
     sys = System(cryst, [1 => Moment(s=1/2, g=gtens)], :dipole; dims=(6, 6, 1))
 
     J1_ten  = [J1+2Jpmpm 0 Jzpm; 0 J1-2Jpmpm 0; Jzpm 0 J1*Δ]
@@ -156,7 +159,8 @@ function determine_B_sat(Js, dir; B_diff_tol=1e-2, energy_tol=1e-8, max_iters=10
     iter = 0
     while B_max - B_min > B_diff_tol && iter < max_iters
         iter += 1
-        set_field!(sys, B_sat * units.T * dir)
+        #set_field!(sys, B_sat * units.T * dir)
+        set_field!(sys, B_sat * dir)
         polarize_system!(sys, -dir)
         e_ref = energy_per_site(sys)
         randomize_spins!(sys)
@@ -200,7 +204,8 @@ function triangular_nlswt_lanczos_calculations(Js, clustersize, dir; B=nothing, 
     # Avoid extremely small fields.
     B = B < 1e-1 ? B + 5.0 : B
 
-    set_field!(sys_min, B * units.T * dir)
+    #set_field!(sys_min, B * units.T * dir)
+    set_field!(sys_min, B * dir)
 
     swt = SpinWaveTheory(sys_min; measure=ssf_perp(sys_min))
     try
