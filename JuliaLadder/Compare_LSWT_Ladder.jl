@@ -17,6 +17,18 @@ E_min, E_max = 0.0, 8.0
 energy_step = 0.01
 energies = collect(E_min:energy_step:E_max)
 
+nq = 12
+qpoints = [[0, 0, 0], [1, 1, 0]]
+
+# ------------------------------------------------------------
+# Parameter conversion at the existing helper's boundary
+# triangular_ladder.jl expects [J1, Jzz, Jpmpm, Jzpm, J2].
+# ------------------------------------------------------------
+function paper_to_ladder_Js(Js)
+    J1, Δ, Jpmpm, Jzpm, J2 = Js
+    return [J1, J1 * Δ, Jpmpm, Jzpm, J2]
+end
+
 # -----------------------------
 # Build LSWT result on 12 q-points to match Lanczos
 # -----------------------------
@@ -67,24 +79,40 @@ function lswt_to_heatmap(disp, data, energies; η=0.2)
     return img
 end
 
-# -----------------------------
-# Compute B_sat once (shared physics scale)
-# -----------------------------
+# ------------------------------------------------------------
+# Shared physical system and momentum path
+# ------------------------------------------------------------
+# Keep the original Js unchanged; convert only for the existing helper.
+B_sat, sys = polarized_system(paper_to_ladder_Js(Js), dir)
 
-# Ladder
-B_sat, sys = polarized_system(Js, dir)
-swt = SpinWaveTheory(sys; measure=dssf_measure(sys))
-nq = 12
-qpath = [[0, 0, 0],[1, 1, 0]]
-path = q_space_path(sys.crystal, qpath, nq)
-println("Ladder B_sat: $B_sat T")
-data, nbreak = ladder_dssf(swt, path; energies, η, verbose=true)
-ladder_img = data[7,:,:] # 7 for prep
-println("Ladder image computed.")
+path = q_space_path(sys.crystal, qpoints, nq)
+
+# polarized_system normally returns an applied field of 1.1 * B_sat.
+println("Applied field: $B_sat")
+# ------------------------------------------------------------
 # LSWT
-lswt_res = run_lswt(Js, B_sat; nqp=12)
-lswt_img = lswt_to_heatmap(lswt_res.disp, lswt_res.data, energies; η=η)
+# ------------------------------------------------------------
+swt_lswt = SpinWaveTheory(sys; measure=ssf_perp(sys))
+lswt_result = intensities_bands(swt_lswt, path)
+lswt_img = lswt_to_heatmap(lswt_result.disp, lswt_result.data, energies; η=η)
+
 println("LSWT image computed.")
+
+# ------------------------------------------------------------
+# Ladder
+# ------------------------------------------------------------
+swt_ladder = SpinWaveTheory(sys; measure=dssf_measure(sys))
+data, nbreak = ladder_dssf(
+    swt_ladder, path;
+    energies,
+    η,
+    verbose=true,
+)
+ladder_img = data[7, :, :]  # perpendicular channel
+
+println("Ladder image computed.")
+println("Ladder expansion breakdowns: $nbreak / $(size(ladder_img, 1))")
+
 # -----------------------------
 # Plot and save
 # -----------------------------
@@ -111,7 +139,7 @@ with_theme(theme_latexfonts()) do
     text!(ax, 0.03, E_max - 1.0,
           text="Js = $(round.(Js, digits=3)), B = $(round(B_sat, digits=3)) T",
           align=(:left, :top), fontsize=14, color=:white)
-    save("./plots/Spin_LSWT.pdf", fig)
+    save("../plots/Spin_LSWT.pdf", fig)
 end
 
 # Ladder heatmap
@@ -134,7 +162,7 @@ with_theme(theme_latexfonts()) do
     text!(ax, 0.03, E_max - 1.0,
           text="Js = $(round.(Js, digits=3)), B = $(round(B_sat, digits=3)) T",
           align=(:left, :top), fontsize=14, color=:white)
-    save("./plots/Spin_Ladder.pdf", fig)
+    save("../plots/Spin_Ladder.pdf", fig)
 end
 
 println("Saved: Spin_LSWT.pdf and Spin_Ladder.pdf")
@@ -166,7 +194,7 @@ with_theme(theme_latexfonts()) do
     text!(ax, 0.03, E_max - 1.0,
           text="Js = $(round.(Js, digits=3)), B = $(round(B_sat, digits=3)) T",
           align=(:left, :top), fontsize=14, color=:white)
-    save("./plots/Spin_Diff.pdf", fig)
+    save("../plots/Spin_Diff.pdf", fig)
 end
 
 println("Saved: Spin_Diff.pdf")
