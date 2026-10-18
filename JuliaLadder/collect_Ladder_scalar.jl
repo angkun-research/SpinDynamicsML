@@ -1,7 +1,7 @@
 using Sunny
 using JLD2
 using CairoMakie
-using DataFrames, CSV,ProgressBars
+using DataFrames, CSV, ProgressMeter #ProgressBars
 
 include("triangular_ladder.jl")
 
@@ -107,15 +107,16 @@ end
 # Store rows in a thread-safe way (no shared mutation inside threads)
 const RowT = NamedTuple{(:Js, :disp, :data, :B), Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}, Float64}}
 rows = RowT[]
-
+p = Progress(Nsamples)
 # Uniformly sample Js from the Jsize dimensional space with each J in range -1 to 1
-for taskid in ProgressBar(1:Nsamples)
+Threads.@threads for taskid in 1:Nsamples #ProgressBar(1:Nsamples)
     Js = Js_all[taskid]
     try
         B_sat, sys = polarized_system(paper_to_ladder_Js(Js), dir)
         path = q_space_path(sys.crystal, qpoints, nq)
         swt_ladder = SpinWaveTheory(sys; measure=dssf_measure(sys))
-        ladder_full, nbreak = ladder_dssf(swt_ladder, path; energies,η)
+        #intensities_bands(swt_ladder, path)
+        ladder_full, nbreak = ladder_dssf(swt_ladder, path; energies,η, threaded=false)
         intensities = @view ladder_full[7, :, :] # perpendicular channel
         if nbreak > 0 || !all(isfinite, intensities)
             @warn "Skipping task $taskid: invalid ladder spectrum" nbreak
@@ -135,6 +136,7 @@ for taskid in ProgressBar(1:Nsamples)
     catch e
         @warn "Error processing task $taskid: $e"
     end
+    next!(p)
 end
 
 results = DataFrame(rows)
