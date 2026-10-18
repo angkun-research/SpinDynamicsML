@@ -1,6 +1,8 @@
 using Sunny
 using CairoMakie
 
+@show Threads.nthreads()
+
 # Reuse Hao's Lanczos and B_sat helpers
 include("../JuliaLadder/triangular_ladder.jl")
 
@@ -13,7 +15,7 @@ Js = [1.0, 0.7, 0.2, 0.2, 0.051]
 dir = [1.0, 0.0, 0.0]
 
 η = 0.2                            # Lorentzian broadening (meV)
-E_min, E_max = 0.0, 8.0
+E_min, E_max = 0.0, 50.0 #8.0
 energy_step = 0.01
 energies = collect(E_min:energy_step:E_max)
 
@@ -93,7 +95,7 @@ println("Applied field: $B_sat")
 # LSWT
 # ------------------------------------------------------------
 swt_lswt = SpinWaveTheory(sys; measure=ssf_perp(sys))
-lswt_result = intensities_bands(swt_lswt, path)
+@time lswt_result = intensities_bands(swt_lswt, path)
 lswt_img = lswt_to_heatmap(lswt_result.disp, lswt_result.data, energies; η=η)
 
 println("LSWT image computed.")
@@ -102,11 +104,12 @@ println("LSWT image computed.")
 # Ladder
 # ------------------------------------------------------------
 swt_ladder = SpinWaveTheory(sys; measure=dssf_measure(sys))
-data, nbreak = ladder_dssf(
+@time data, nbreak = ladder_dssf(
     swt_ladder, path;
     energies,
     η,
-    verbose=true,
+    threaded=false,
+    verbose=false,
 )
 ladder_img = data[7, :, :]  # perpendicular channel
 
