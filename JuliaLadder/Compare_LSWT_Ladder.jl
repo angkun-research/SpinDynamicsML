@@ -96,6 +96,7 @@ println("Applied field: $B_sat")
 # ------------------------------------------------------------
 swt_lswt = SpinWaveTheory(sys; measure=ssf_perp(sys))
 @time lswt_result = intensities_bands(swt_lswt, path)
+@time lswt_result = intensities_bands(swt_lswt, path)
 lswt_img = lswt_to_heatmap(lswt_result.disp, lswt_result.data, energies; η=η)
 
 println("LSWT image computed.")
@@ -108,7 +109,14 @@ swt_ladder = SpinWaveTheory(sys; measure=dssf_measure(sys))
     swt_ladder, path;
     energies,
     η,
-    threaded=false,
+    threaded=true,
+    verbose=false,
+)
+@time data, nbreak = ladder_dssf(
+    swt_ladder, path;
+    energies,
+    η,
+    threaded=true,
     verbose=false,
 )
 ladder_img = data[7, :, :]  # perpendicular channel
