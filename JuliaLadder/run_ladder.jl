@@ -15,7 +15,7 @@ include(joinpath(@__DIR__, "triangular_ladder.jl"))
 Js = [1.0, 0.7, 0.2, 0.2, 0.051]          # [J1, J1zz, Jpmpm, Jzpm, J2]
 dir = [1.0, 0.0, 0.0]                    # field direction; B = 1.1 B_sat
 qpath = [[0, 0, 0],[1, 1, 0]] #[[0, 0, 0], [1/3, 1/3, 0], [1/2, 1/2, 0], [1, 1, 0]]
-labels = [] #["Γ", "K", "M", "Γ"]
+labels = nothing                         # automatic coordinate labels; or one string per qpath point
 nq = 12                                  # q points along the path (approximate)
 η = 0.2                                  # Lorentzian HWHM
 dE = 0.01                                # energy step, ≤ η/2
@@ -25,7 +25,7 @@ Sunny.load_blas_for_threading()
 BLAS.set_num_threads(1)
 
 # ---- Compute ----
-t_B = @elapsed B, sys = polarized_system(Js, dir)
+t_B = @elapsed B, sys, sat = polarized_system(Js, dir)
 swt = SpinWaveTheory(sys; measure=dssf_measure(sys))
 path = q_space_path(sys.crystal, qpath, nq; labels)
 energies = collect(0.0:dE:ceil(energy_max(swt)))
@@ -37,7 +37,7 @@ disp = dispersion(swt, path)
 
 nq_path = length(path.qs)
 println()
-@printf("Js = %s, B = %.4f (B_sat = %.4f)\n", string(Js), B, B / 1.1)
+@printf("Js = %s, B = %.4f (B_sat = %.4f)\n", string(Js), B, sat.B_sat)
 @printf("%d q × %d energies, %d threads; breakdown at %d q\n", nq_path, length(energies), Threads.nthreads(), nbreak)
 @printf("B_sat bisection   %6.2f s  (mostly compilation; about 0.02 s when warm)\n", t_B)
 @printf("compilation       %6.2f s  (first call, 2 q)\n", t_compile)
@@ -65,3 +65,4 @@ end
 # mkpath(joinpath(@__DIR__, "figures"))
 # save(joinpath(@__DIR__, "figures", "run_job.png"), fig)
 fig
+println("success")

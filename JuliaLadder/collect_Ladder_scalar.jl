@@ -112,7 +112,7 @@ p = Progress(Nsamples)
 Threads.@threads for taskid in 1:Nsamples #ProgressBar(1:Nsamples)
     Js = Js_all[taskid]
     try
-        B_sat, sys = polarized_system(paper_to_ladder_Js(Js), dir)
+        B, sys, _ = polarized_system(paper_to_ladder_Js(Js), dir)
         path = q_space_path(sys.crystal, qpoints, nq)
         swt_ladder = SpinWaveTheory(sys; measure=dssf_measure(sys))
         #intensities_bands(swt_ladder, path)
@@ -131,7 +131,7 @@ Threads.@threads for taskid in 1:Nsamples #ProgressBar(1:Nsamples)
         if Jsize == 4
             Js = Js[[1, 2, 3, 5]]
         end
-        temp = (Js = copy(Js), disp = vec(Es_all), data = vec(Ss_all), B = copy(B_sat))
+        temp = (Js = copy(Js), disp = vec(Es_all), data = vec(Ss_all), B = copy(B))
         push!(rows, temp)
     catch e
         @warn "Error processing task $taskid: $e"

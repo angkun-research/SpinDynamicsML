@@ -1,9 +1,9 @@
+import sys
 from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tqdm.auto import tqdm
-
 
 class FCautoencoder(nn.Module):
     """
@@ -148,7 +148,10 @@ def train(
     total_rel_error = 0.0
     total_mse = 0.0
 
-    for batch_idx, (data, target) in enumerate(tqdm(dataloader)):
+    #for batch_idx, (data, target) in enumerate(tqdm(dataloader)):
+    for batch_idx, (data, target) in enumerate(
+        tqdm(dataloader, disable=not sys.stderr.isatty())
+    ):
         data = data.to(device)
         target = target.to(device)
 
@@ -235,7 +238,10 @@ def test(
     test_var_values = []
 
     with torch.no_grad():
-        for data, target in tqdm(dataloader, desc="Testing"):
+        #for data, target in tqdm(dataloader, desc="Testing"):
+        for data, target in tqdm(
+            dataloader, desc="Testing", disable=not sys.stderr.isatty()
+        ):
             data = data.to(device)
             target = target.to(device)
 

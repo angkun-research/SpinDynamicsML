@@ -15,7 +15,7 @@ Js = [1.0, 0.7, 0.2, 0.2, 0.051]
 dir = [1.0, 0.0, 0.0]
 
 η = 0.2                            # Lorentzian broadening (meV)
-E_min, E_max = 0.0, 50.0 #8.0
+E_min, E_max = 0.0, 8.0
 energy_step = 0.01
 energies = collect(E_min:energy_step:E_max)
 
@@ -85,12 +85,13 @@ end
 # Shared physical system and momentum path
 # ------------------------------------------------------------
 # Keep the original Js unchanged; convert only for the existing helper.
-B_sat, sys = polarized_system(paper_to_ladder_Js(Js), dir)
+#B_sat, sys = polarized_system(paper_to_ladder_Js(Js), dir)
+B, sys, sat = polarized_system(paper_to_ladder_Js(Js), dir)
 
 path = q_space_path(sys.crystal, qpoints, nq)
 
 # polarized_system normally returns an applied field of 1.1 * B_sat.
-println("Applied field: $B_sat")
+println("Applied field: $B")
 # ------------------------------------------------------------
 # LSWT
 # ------------------------------------------------------------
@@ -148,7 +149,7 @@ with_theme(theme_latexfonts()) do
     ylims!(ax, E_min, E_max)
     Colorbar(fig[1, 2], hm, label=L"S^{LSWT}_{\perp}(\mathbf{q}, E)")
     text!(ax, 0.03, E_max - 1.0,
-          text="Js = $(round.(Js, digits=3)), B = $(round(B_sat, digits=3)) T",
+          text="Js = $(round.(Js, digits=3)), B = $(round(B, digits=3)) T",
           align=(:left, :top), fontsize=14, color=:white)
     save("../plots/Spin_LSWT.pdf", fig)
 end
@@ -171,7 +172,7 @@ with_theme(theme_latexfonts()) do
     ylims!(ax, E_min, E_max)
     Colorbar(fig[1, 2], hm, label=L"S^{Ladder}_{\perp}(\mathbf{q}, E)")
     text!(ax, 0.03, E_max - 1.0,
-          text="Js = $(round.(Js, digits=3)), B = $(round(B_sat, digits=3)) T",
+          text="Js = $(round.(Js, digits=3)), B = $(round(B, digits=3)) T",
           align=(:left, :top), fontsize=14, color=:white)
     save("../plots/Spin_Ladder.pdf", fig)
 end
@@ -203,7 +204,7 @@ with_theme(theme_latexfonts()) do
     ylims!(ax, E_min, E_max)
     Colorbar(fig[1, 2], hm, label=L"\Delta S_{\perp} (\mathrm{LSWT} - \mathrm{Ladder})")
     text!(ax, 0.03, E_max - 1.0,
-          text="Js = $(round.(Js, digits=3)), B = $(round(B_sat, digits=3)) T",
+          text="Js = $(round.(Js, digits=3)), B = $(round(B, digits=3)) T",
           align=(:left, :top), fontsize=14, color=:white)
     save("../plots/Spin_Diff.pdf", fig)
 end
