@@ -19,8 +19,9 @@ from sklearn.multioutput import MultiOutputRegressor
 warnings.filterwarnings('ignore') # Suppress warnings for cleaner output
 
 # ------ Config ------
-CSV_PATH    = './data/triangular_anisotropy_uniform_Js4_B50_Nk20_NJ30.csv'
+#CSV_PATH    = './data/triangular_anisotropy_uniform_Js4_B50_Nk20_NJ30.csv'
 #CSV_PATH = './data/HaoResults/Hao_anisotropy_Js4_uniform_trace_Filter100_Bsats.csv'
+CSV_PATH = './data/HaoResults/THL_dataset01_Js4_Scalar_Qz0_Nk12_Filter20.csv'
 SEED        = 1234
 TRAIN_RATIO = 0.9
 GPR_MAX_TRAIN = 2000
@@ -69,18 +70,18 @@ def load_raw_data_lanczos(csv_path):
     for col in ['data', 'disp', 'Js']:
         df[col] = df[col].apply(json.loads)
     # wrong naming in previous data
-    disp = np.array(df['data'].tolist(), dtype=np.float32)   # (N, L)
-    inten = np.array(df['disp'].tolist(), dtype=np.float32)  # (N, L)
-    # disp = np.array(df['disp'].tolist(), dtype=np.float32)
-    # inten = np.array(df['data'].tolist(), dtype=np.float32)
+    # disp = np.array(df['data'].tolist(), dtype=np.float32)   # (N, L)
+    # inten = np.array(df['disp'].tolist(), dtype=np.float32)  # (N, L)
+    disp = np.array(df['disp'].tolist(), dtype=np.float32)
+    inten = np.array(df['data'].tolist(), dtype=np.float32)
     y = np.array(df['Js'].tolist(), dtype=np.float32)
     print(f"Total samples: {len(df)}")
     #X = np.stack([disp, inten], axis=1)
 
-    y = np.delete(y, 3, axis=1)   # remove 4th column (0-based index), shape becomes (N, 4)
+    #y = np.delete(y, 3, axis=1)   # remove 4th column (0-based index), shape becomes (N, 4)
     N = len(df)
     n_comp = 1 #6
-    n_e = 100 #3 #20
+    n_e = 20 #100 #3 #20
     n_k = disp.shape[1] // n_comp // n_e
     # Recover (N, 6, n_k, n_e)
     disp4 = disp.reshape(N, n_comp, n_k, n_e)
@@ -121,8 +122,8 @@ def mse(y_pred, y_true):
 # ------ Main ------
 np.random.seed(SEED)
 
-X, y = load_raw_data_LSWT(CSV_PATH)
-#X, y = load_raw_data_lanczos(CSV_PATH)
+#X, y = load_raw_data_LSWT(CSV_PATH)
+X, y = load_raw_data_lanczos(CSV_PATH)
 train_idx, test_idx = split_indices(len(X), TRAIN_RATIO, SEED)
 X_train, y_train = X[train_idx], y[train_idx]
 X_test,  y_test  = X[test_idx],  y[test_idx]
@@ -157,3 +158,7 @@ for name, model in build_models(SEED).items():
 
     gpr_note = f" (cap {GPR_MAX_TRAIN})" if name == 'GPR' and len(y_train) > GPR_MAX_TRAIN else ""
     print(f"{name+gpr_note:<20} {tr_mse:>14.6e} {tr_rel:>13.6e} {te_mse:>14.6e} {te_rel:>13.6e}")
+
+
+# run without interaption:
+# nohup python pythonML/Classic_ML_Regression.py > pythonML/classical_ML_output.log 2>&1 &

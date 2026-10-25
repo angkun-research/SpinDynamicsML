@@ -47,131 +47,60 @@ plt.rcParams['mathtext.bf'] = 'Times New Roman:bold'
 # \sqrt{\mathrm{var}}_{\sigma=0.1}=[0.007628, 0.031654, 0.049083, 0.015609]
 
 
-# CSV_PATH = "./data/THED_noise_best20_validation_metrics.csv"
-# #CSV_PATH = "./data/THED_noise_last20_validation_metrics.csv"
-# OUTPUT_PATH = "./plots/sigma_vs_metrics_THED.pdf"
-# EXPECTED_EPOCHS_PER_SIGMA = 20
+#CSV_PATH = "./data/THED_noise_best20_validation_metrics.csv"
+#CSV_PATH = "./data/THED_noise_last20_validation_metrics.csv"
+CSV_PATH = "./data/THL_noise_best20_validation_metrics.csv"
+#OUTPUT_PATH = "./plots/sigma_vs_metrics_THED.pdf"
+OUTPUT_PATH = "./plots/sigma_vs_metrics_THL.pdf"
+EXPECTED_EPOCHS_PER_SIGMA = 20
 
-# results = pd.read_csv(CSV_PATH)
+results = pd.read_csv(CSV_PATH)
 
-# required_columns = {"sigma", "epoch", "mean_variance","median_variance", "mare"}
+required_columns = {"sigma", "epoch", "mean_variance","median_variance", "mare"}
 
-# summary = (
-#     results.groupby("sigma", as_index=False)
-#     .agg(
-#         mean_variance_mean=("mean_variance", "mean"),
-#         mean_variance_std=("mean_variance", "std"),
-#         median_variance_mean=("median_variance", "mean"),
-#         median_variance_std=("median_variance", "std"),
-#         mare_mean=("mare", "mean"),
-#         mare_std=("mare", "std"),
-#         mean_variance_max=("mean_variance", "max"),
-#     )
-#     .sort_values("sigma")
-# )
+summary = (
+    results.groupby("sigma", as_index=False)
+    .agg(
+        mean_variance_mean=("mean_variance", "mean"),
+        mean_variance_std=("mean_variance", "std"),
+        median_variance_mean=("median_variance", "mean"),
+        median_variance_std=("median_variance", "std"),
+        mare_mean=("mare", "mean"),
+        mare_std=("mare", "std"),
+        mean_variance_max=("mean_variance", "max"),
+    )
+    .sort_values("sigma")
+)
 
-# print("Final-20-epoch validation summary:")
-# print(summary.to_string(index=False))
+print("Final-20-epoch validation summary:")
+print(summary.to_string(index=False))
 
-# sigmas = summary["sigma"].to_numpy()
-# mean_vars = summary["mean_variance_mean"].to_numpy()
-# mean_vars_std = summary["mean_variance_std"].to_numpy()
-# # mean_vars = summary["mean_variance_max"].to_numpy()
-# median_vars = summary["median_variance_mean"].to_numpy()
-# median_vars_std = summary["median_variance_std"].to_numpy()
-# mare = summary["mare_mean"].to_numpy()
-# mare_std = summary["mare_std"].to_numpy()
+sigmas = summary["sigma"].to_numpy()
+mean_vars = summary["mean_variance_mean"].to_numpy()
+mean_vars_std = summary["mean_variance_std"].to_numpy()
+# mean_vars = summary["mean_variance_max"].to_numpy()
+median_vars = summary["median_variance_mean"].to_numpy()
+median_vars_std = summary["median_variance_std"].to_numpy()
+mare = summary["mare_mean"].to_numpy()
+mare_std = summary["mare_std"].to_numpy()
 
-# fig, ax = plt.subplots(figsize=(5.5, 4.5))
-# scale = 10**2
+fig, ax = plt.subplots(figsize=(5.5, 4.5))
+scale = 10**2
 # ax.errorbar(sigmas,median_vars*scale,yerr=median_vars_std*scale,
 #     color="#1f77b4",marker="o",markersize=5,
 #     linewidth=2.0,capsize=3,label=r"$100\times$ MPV",
 # )
-# # ax.errorbar(sigmas,mean_vars*scale,yerr=mean_vars_std*scale,
-# #     color="#1f77b4",marker="o",markersize=5,
-# #     linewidth=2.0,capsize=3,label=r"$\langle \sigma^2 \rangle$",
-# # )
-# ax.errorbar(sigmas,mare,yerr=mare_std,
-#     color="#d62728",marker="s",markersize=3,
-#     linewidth=2.0,capsize=5,label="MARE",
-# )
-
-# ax.set_ylim(4e-3, 1e-1)
-# ax.set_xlabel(r"$\sigma_\epsilon$", fontsize=14)
-# ax.set_ylabel("Error metric", fontsize=12)
-# ax.set_yscale("log")
-# ax.grid(alpha=0.3, which="both")
-# ax.tick_params(axis="both", which="major", labelsize=12)
-# ax.legend(loc="best", fontsize=12)
-
-# fig.tight_layout()
-# plt.savefig(OUTPUT_PATH, bbox_inches="tight")
-# plt.close()
-
-# print(f"Saved figure to: {OUTPUT_PATH}")
-
-
-
-
-CSV_PATH = "./data/LSWT_gaussian_noise_best20_validation_metrics_epochs200.csv"
-CSV_PATH2 = "./data/LSWT_poisson_noise_best20_validation_metrics_epochs200.csv"
-OUTPUT_PATH = "./plots/sigma_vs_metrics_LSWT.pdf"
-
-def load_and_summarize(csv_path):
-    results = pd.read_csv(csv_path)
-    required_columns = {"sigma", "epoch", "mean_variance","median_variance", "mare"}
-
-    summary = (
-        results.groupby("sigma", as_index=False)
-        .agg(
-            mean_variance_mean=("mean_variance", "mean"),
-            mean_variance_std=("mean_variance", "std"),
-            median_variance_mean=("median_variance", "mean"),
-            median_variance_std=("median_variance", "std"),
-            mare_mean=("mare", "mean"),
-            mare_std=("mare", "std"),
-            mean_variance_max=("mean_variance", "max"),
-        )
-        .sort_values("sigma")
-    )
-
-    print("Final-20-epoch validation summary:")
-    print(summary.to_string(index=False))
-
-    sigmas = summary["sigma"].to_numpy()
-    mean_vars = summary["mean_variance_mean"].to_numpy()
-    mean_vars_std = summary["mean_variance_std"].to_numpy()
-    median_vars = summary["median_variance_mean"].to_numpy()
-    median_vars_std = summary["median_variance_std"].to_numpy()
-    mare = summary["mare_mean"].to_numpy()
-    mare_std = summary["mare_std"].to_numpy()
-    return sigmas, mean_vars, mean_vars_std, mare, mare_std
-
-sigmas, mean_vars, mean_vars_std, mare, mare_std = load_and_summarize(CSV_PATH)
-sigmas2, mean_vars2, mean_vars_std2, mare2, mare_std2 = load_and_summarize(CSV_PATH2)
-
-fig, ax = plt.subplots(figsize=(5.5, 4.5))
-scale = 1 #10**2
-ax.errorbar(sigmas,mean_vars,yerr=mean_vars_std*scale,
+ax.errorbar(sigmas,mean_vars*scale,yerr=mean_vars_std*scale,
     color="#1f77b4",marker="o",markersize=5,
-    linewidth=2.0,capsize=3,label=r"$\langle \sigma^2 \rangle$",
+    linewidth=2.0,capsize=3,label=r"$100\times\langle \sigma^2 \rangle$",
 )
 ax.errorbar(sigmas,mare,yerr=mare_std,
     color="#d62728",marker="s",markersize=3,
     linewidth=2.0,capsize=5,label="MARE",
 )
-ax.errorbar(sigmas2,mean_vars2,yerr=mean_vars_std2*scale,
-    color="#1f77b4",marker="^",markersize=5,linestyle="--",
-    linewidth=2.0,capsize=3,label=r"$\langle \sigma^2 \rangle$ (Poisson)",
-)
-ax.errorbar(sigmas2,mare2,yerr=mare_std2,
-    color="#d62728",marker="d",markersize=3,linestyle="--",
-    linewidth=2.0,capsize=5,label="MARE (Poisson)",
-)
 
-ax.set_ylim(1e-5, 1e-1)
-ax.set_xlabel(r"$\sigma_\epsilon$ (or $1/T$ Poisson)", fontsize=14)
+ax.set_ylim(5e-3, 1e-1)
+ax.set_xlabel(r"$\sigma_\epsilon$", fontsize=14)
 ax.set_ylabel("Error metric", fontsize=12)
 ax.set_yscale("log")
 ax.grid(alpha=0.3, which="both")
@@ -183,3 +112,76 @@ plt.savefig(OUTPUT_PATH, bbox_inches="tight")
 plt.close()
 
 print(f"Saved figure to: {OUTPUT_PATH}")
+
+
+
+
+# CSV_PATH = "./data/LSWT_gaussian_noise_best20_validation_metrics_epochs200.csv"
+# CSV_PATH2 = "./data/LSWT_poisson_noise_best20_validation_metrics_epochs200.csv"
+# OUTPUT_PATH = "./plots/sigma_vs_metrics_LSWT.pdf"
+
+# def load_and_summarize(csv_path):
+#     results = pd.read_csv(csv_path)
+#     required_columns = {"sigma", "epoch", "mean_variance","median_variance", "mare"}
+
+#     summary = (
+#         results.groupby("sigma", as_index=False)
+#         .agg(
+#             mean_variance_mean=("mean_variance", "mean"),
+#             mean_variance_std=("mean_variance", "std"),
+#             median_variance_mean=("median_variance", "mean"),
+#             median_variance_std=("median_variance", "std"),
+#             mare_mean=("mare", "mean"),
+#             mare_std=("mare", "std"),
+#             mean_variance_max=("mean_variance", "max"),
+#         )
+#         .sort_values("sigma")
+#     )
+
+#     print("Final-20-epoch validation summary:")
+#     print(summary.to_string(index=False))
+
+#     sigmas = summary["sigma"].to_numpy()
+#     mean_vars = summary["mean_variance_mean"].to_numpy()
+#     mean_vars_std = summary["mean_variance_std"].to_numpy()
+#     median_vars = summary["median_variance_mean"].to_numpy()
+#     median_vars_std = summary["median_variance_std"].to_numpy()
+#     mare = summary["mare_mean"].to_numpy()
+#     mare_std = summary["mare_std"].to_numpy()
+#     return sigmas, mean_vars, mean_vars_std, mare, mare_std
+
+# sigmas, mean_vars, mean_vars_std, mare, mare_std = load_and_summarize(CSV_PATH)
+# sigmas2, mean_vars2, mean_vars_std2, mare2, mare_std2 = load_and_summarize(CSV_PATH2)
+
+# fig, ax = plt.subplots(figsize=(5.5, 4.5))
+# scale = 1 #10**2
+# ax.errorbar(sigmas,mean_vars,yerr=mean_vars_std*scale,
+#     color="#1f77b4",marker="o",markersize=5,
+#     linewidth=2.0,capsize=3,label=r"$\langle \sigma^2 \rangle$",
+# )
+# ax.errorbar(sigmas,mare,yerr=mare_std,
+#     color="#d62728",marker="s",markersize=3,
+#     linewidth=2.0,capsize=5,label="MARE",
+# )
+# ax.errorbar(sigmas2,mean_vars2,yerr=mean_vars_std2*scale,
+#     color="#1f77b4",marker="^",markersize=5,linestyle="--",
+#     linewidth=2.0,capsize=3,label=r"$\langle \sigma^2 \rangle$ (Poisson)",
+# )
+# ax.errorbar(sigmas2,mare2,yerr=mare_std2,
+#     color="#d62728",marker="d",markersize=3,linestyle="--",
+#     linewidth=2.0,capsize=5,label="MARE (Poisson)",
+# )
+
+# ax.set_ylim(1e-5, 1e-1)
+# ax.set_xlabel(r"$\sigma_\epsilon$ (or $1/T$ Poisson)", fontsize=14)
+# ax.set_ylabel("Error metric", fontsize=12)
+# ax.set_yscale("log")
+# ax.grid(alpha=0.3, which="both")
+# ax.tick_params(axis="both", which="major", labelsize=12)
+# ax.legend(loc="best", fontsize=12)
+
+# fig.tight_layout()
+# plt.savefig(OUTPUT_PATH, bbox_inches="tight")
+# plt.close()
+
+# print(f"Saved figure to: {OUTPUT_PATH}")
