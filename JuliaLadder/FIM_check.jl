@@ -236,14 +236,14 @@ end
 println("FIM_identifiability.jl — example run")
     # Example 4-parameter anisotropy point (adjust to your model dimensionality)
 #J0 = [1.0,0.7,0.2,0.01,0.051] #[1.0,0.2,0.1,0.05, 0.5]
-J0 = [1.0,0.7,0.2,0.051]
-Qz = 2
+J0 = [1.0,0.7,0.2,0.2,0.051]
+Qz = 0
 println("Qz: ", Qz)
 println("Computing FIM at J0 = ", J0)
-observable = :perp #:tensor #:perp
+observable = :tensor #:tensor #:perp
 println("Observable: ", observable)
 tensor_components = :sym6
-backend = :ladder #:ladder #:lswt
+backend = :lswt #:ladder #:lswt
 println("Backend: ", backend)
 if length(J0) == 4
     Jtemp = vcat(J0[1:3], 0.0, J0[4])
