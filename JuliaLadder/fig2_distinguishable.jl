@@ -48,8 +48,8 @@ data2 = channels(sys2)
 # ΔS = S(J′) − S(J). Panels, as indices into DSSF_CHANNELS: perp, yy, zz, zx+xz
 cols = [7, 2, 3, 6]
 # Upright bold J, as \mathbf{J} in the manuscript (MathTeXEngine's \mathbf alone is bold italic)
-titles1 = [L"S_\perp(\mathrm{\mathbf{J}})", L"S_{yy}(\mathrm{\mathbf{J}})", L"S_{zz}(\mathrm{\mathbf{J}})", L"S_{zx}+S_{xz}\,(\mathrm{\mathbf{J}})"]
-titles2 = [L"\Delta S_\perp", L"\Delta S_{yy}", L"\Delta S_{zz}", L"\Delta(S_{zx}+S_{xz})"]
+titles1 = [L"S_\perp(\mathrm{\mathbf{J}})", L"S_{yy}(\mathrm{\mathbf{J}})", L"S_{zz}(\mathrm{\mathbf{J}})", L"S_{zy}+S_{yz}\,(\mathrm{\mathbf{J}})"]
+titles2 = [L"\Delta S_\perp", L"\Delta S_{yy}", L"\Delta S_{zz}", L"\Delta(S_{zy}+S_{yz})"]
 S1 = [data1[c, :, :] for c in cols]
 ΔS = [data2[c, :, :] - data1[c, :, :] for c in cols]
 # Relative L2 difference over the (q, ω) grid

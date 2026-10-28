@@ -87,7 +87,7 @@ function Run_Ladder(Js, B;
     polarize_system!(sys, [-1,0,0])  
     path = q_space_path(sys.crystal, [[0, 0, Qz], [1, 1, Qz]], Nk)
     swt = SpinWaveTheory(sys; measure=dssf_measure(sys))
-    e_max = 10 #energy_max(swt)
+    e_max = 10 #energy_max(swt) #10
     energies = collect(0.0:0.01:e_max)
     data, nbreak = ladder_dssf(swt, path; energies=energies, η=eta,
                               threaded=false, verbose=false)
@@ -237,13 +237,13 @@ println("FIM_identifiability.jl — example run")
     # Example 4-parameter anisotropy point (adjust to your model dimensionality)
 #J0 = [1.0,0.7,0.2,0.01,0.051] #[1.0,0.2,0.1,0.05, 0.5]
 J0 = [1.0,0.7,0.2,0.2,0.051]
-Qz = 0
+Qz = 1
 println("Qz: ", Qz)
 println("Computing FIM at J0 = ", J0)
-observable = :tensor #:tensor #:perp
+observable = :perp #:tensor #:perp
 println("Observable: ", observable)
 tensor_components = :sym6
-backend = :lswt #:ladder #:lswt
+backend = :ladder #:ladder #:lswt
 println("Backend: ", backend)
 if length(J0) == 4
     Jtemp = vcat(J0[1:3], 0.0, J0[4])

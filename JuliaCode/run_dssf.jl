@@ -72,5 +72,6 @@ with_theme(theme_latexfonts()) do
         text!(ax3, 0.05, 15, text="L2 Norm = $(round(norms[i], digits=3))", align = (:left, :top), fontsize=labelsize, color=:black)
     end
     fig
-    save(joinpath(homedir(), "Desktop", "sample$(sample_id)_B||$(round(θ, digits=0))deg_dssf_2.png"), fig)
+    #save(joinpath(homedir(), "Desktop", "sample$(sample_id)_B||$(round(θ, digits=0))deg_dssf_2.png"), fig)
+    save("./plots/Spin_LSWT_full_tensor.pdf", fig)
 end

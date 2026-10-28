@@ -222,15 +222,18 @@ println("FIM_identifiability.jl — example run")
     # Example 4-parameter anisotropy point (adjust to your model dimensionality)
 #J0 = [1.0, 0.9, 0.1, 0.05, 0.2]   # length d must match your Run_LSWT expectation slice
 #J0 = [1.0, 0.9, 0.1, 0.2]
-J0 = [1.0,0.2,0.1,0.05,0.5] #[1.0,0.2,0.1,0.05, 0.5]
-Qz = 0
+J0 = [1.0,0.7,0.2,0.2,0.051] #[1.0,0.2,0.1,0.05,0.5] #[1.0,0.2,0.1,0.05, 0.5]
+B_sat, _ = determine_B_sat(J0, [1,0,0])
+B_sat = B_sat + 0.5
+println("B_sat = ", B_sat)
+Qz = 1
 println("Computing FIM at J0 = ", J0)
-observable = :tensor #:tensor #:perp
+observable = :perp #:tensor #:perp
 println("Observable: ", observable)
 tensor_components = :sym6
-backend = :lswt #:lswt #:lanczos
+backend = :lanczos #:lswt #:lanczos
 println("Backend: ", backend)
-res = compute_FIM(J0; backend=backend, delta=1e-3, B=60, Nk=200, 
+res = compute_FIM(J0; backend=backend, delta=1e-3, B=B_sat, Nk=200, 
     observable=observable, tensor_components=tensor_components, Qz=Qz)
 println("Eigenvalues (desc): ", res.evals)
 println("Condition est: ", res.info[:cond])

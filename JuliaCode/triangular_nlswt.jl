@@ -144,9 +144,9 @@ function determine_B_sat(Js, dir; B_diff_tol=1e-2, energy_tol=1e-8, max_iters=10
     cryst = Crystal(latvecs, positions, 162)
 
     # g-tensor for KYbSe₂
-    # gab, gcc = 3.13*1.09310, 1.01
-    # gtens = [gab 0 0; 0 gab 0; 0 0 gcc]
-    gtens = 1
+    gab, gcc = 3.13*1.09310, 1.01
+    gtens = [gab 0 0; 0 gab 0; 0 0 gcc]
+    #gtens = 1
     sys = System(cryst, [1 => Moment(s=1/2, g=gtens)], :dipole; dims=(6, 6, 1))
 
     J1_ten  = [J1+2Jpmpm 0 Jzpm; 0 J1-2Jpmpm 0; Jzpm 0 J1*Δ]

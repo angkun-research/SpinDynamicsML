@@ -10,7 +10,8 @@ include("triangular_ladder.jl")
 # User parameters
 # -----------------------------
 #Js = [1.0, 0.2, 0.1, -0.1, 0.5]  # [J1, Delta, Jpmpm, Jzpm, J2]
-Js = [1.0, 0.7, 0.2, 0.2, 0.051]  # [J1, Delta, Jpmpm, Jzpm, J2]
+#Js = [1.0, 0.7, 0.2, 0.2, 0.051]  # [J1, Delta, Jpmpm, Jzpm, J2]
+Js = [1.0, 0.2, 0.4, 0.0, 0.5]
 dir = [1.0, 0.0, 0.0]
 
 eta = 0.2                          # Lorentzian broadening (meV)
