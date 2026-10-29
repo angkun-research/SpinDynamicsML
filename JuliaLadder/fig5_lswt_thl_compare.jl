@@ -12,7 +12,7 @@ using LaTeXStrings
 include("triangular_ladder.jl")
 
 # ---- Settings ----
-Js = [1.0, 0.7, 0.2, 0.2, 0.051]         # [J1, J1zz, Jpmpm, Jzpm, J2]
+Js = [1.0, 0.7, 0.2, 0.0, 0.051]         # [J1, J1zz, Jpmpm, Jzpm, J2]
 dir = [1.0, 0.0, 0.0]                    # field direction; B = B_sat + |J1|
 # q = (h, h, 0): the path and number of q points of the training data
 qpath = [[0, 0, 0], [1, 1, 0]]
@@ -70,7 +70,7 @@ fig = with_theme(theme_latexfonts(); fontsize=9) do
         Colorbar(fig[1, i], hm; vertical=false, height=5, ticklabelsize=7, ticksize=2,
                  ticks=WilkinsonTicks(4; k_min=3))
         # APS-style panel label, on its own row above the colorbar
-        Label(fig[0, i], "($('a' + i - 1))"; fontsize=10, halign=:left, tellwidth=false)
+        Label(fig[0, i], "$('a' + i - 1)"; fontsize=10, halign=:left, tellwidth=false)
     end
     rowgap!(fig.layout, 2)
     colgap!(fig.layout, 10)

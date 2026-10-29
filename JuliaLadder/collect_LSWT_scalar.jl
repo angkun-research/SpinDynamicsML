@@ -20,8 +20,8 @@ function Run_LSWT(sys,B; Nk=60, QZ=0)
 end
 
 
-Jsize = 5 #5 #4
-N_uniform = 20 #30
+Jsize = 4 #5 #4
+N_uniform = 30 #30
 Nk = 60 #12
 Nsamples = 2*N_uniform^(Jsize-1)
 Js_all = Vector{Float64}[]

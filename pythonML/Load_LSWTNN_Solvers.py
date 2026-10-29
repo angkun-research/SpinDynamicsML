@@ -19,7 +19,7 @@ from pythonML.utils import apply_standardizer
 #
 # Usage:
 #   source .venv/bin/activate
-#   python HPCtemp/Eval_Single_Solvers.py [--model conv1] [--hidden 64]
+#   python pythonML/Load_LSWTNN_Solvers.py [--model conv1] [--hidden 64]
 
 MODELS = {
     'mlp': RegressionMLP, 'conv1': ConvType1, 'conv2': ConvType2, 'conv3': ConvType3,
@@ -28,11 +28,12 @@ MODELS = {
 PARAM_NAMES = ['J1', 'Delta*J1', 'Jpmpm', 'J2']
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--ckpt', default='./data/Conv1D_anisotropy_LSWT_scalar_Js4_hidden64_Nk12_Bdep.pth')
+parser.add_argument('--ckpt', default='./data/Conv1D_anisotropy_LSWT_scalar_Js4_hidden64_Nk60_Bdep_unitless.pth') 
+# Conv1D_anisotropy_LSWT_scalar_Js4_hidden64_Nk12_Bdep.pth')
 parser.add_argument('--model', default='conv1', choices=MODELS.keys())
 parser.add_argument('--hidden', type=int, default=64)
-parser.add_argument('--lswt_csv', default='./data/LSWT_Js4_Bsat_Nk12_test_1.csv')
-parser.add_argument('--thed_csv', default='./data/THED_Js4_Nk12_Ne1.csv')
+parser.add_argument('--lswt_csv', default='./data/LSWT_Js4_Bdep_Nk60_test_unitless.csv')
+parser.add_argument('--thed_csv', default='./data/THL_Js4_Nk60_Ne1.csv')
 args = parser.parse_args()
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

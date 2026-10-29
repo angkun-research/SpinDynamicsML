@@ -7,10 +7,11 @@ include("triangular_ladder.jl")
 # User parameters
 # -----------------------------
 # [J1, Δ, Jpmpm, Jzpm, J2]
+#Js0 = [1.0, 0.7, 0.2, 0.0, 0.051] 
 Js0 = [1. , 1. , 1. ,0.0 , 0.5]
-#Js = Js0
+Js = Js0
 #Js = [1.018004, 1.028298, 1.016899, 0.0, 0.5007  ]
-Js = [1.004141, 0.973033, 1.003829,0.0, 0.509457]
+#Js = [1.004141, 0.973033, 1.003829,0.0, 0.509457]
 dir = [1.0, 0.0, 0.0]
 B_sat, sys, _ = polarized_system(Js0, dir)
 
@@ -85,8 +86,8 @@ push!(results, (
     vec(res.disp),
 ))
 
-#CSV.write("../data/THL_Js4_Nk60_Ne100_idx8.csv", results)
+CSV.write("../data/THL_Js4_Nk60_Ne100_idx8.csv", results)
 #CSV.write("../data/THL_Js4_Nk60_Ne100_idx8_sigma0.0.csv", results)
-CSV.write("../data/THL_Js4_Nk60_Ne100_idx8_sigma0.1.csv", results)
+#CSV.write("../data/THL_Js4_Nk60_Ne100_idx8_sigma0.1.csv", results)
 println("saved results to data")
 
