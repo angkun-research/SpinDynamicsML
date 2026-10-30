@@ -48,7 +48,8 @@ def load_solver_csv(path):
     inten = np.array(df['data'].tolist(), dtype=np.float32)
     y = np.array(df['Js'].tolist(), dtype=np.float32)
     y[:, 1] *= y[:, 0]
-    return np.stack([disp, inten], axis=1), y
+    #return np.stack([disp, inten], axis=1), y
+    return np.stack([disp], axis=1), y
 
 
 def load_model(ckpt_path, model_name, hidden_dim, in_channels, input_length, output_dim):
@@ -68,6 +69,13 @@ def predict(model, X, X_mean, X_std):
 
 solvers = {'LSWT': args.lswt_csv, 'THED': args.thed_csv}
 data = {name: load_solver_csv(path) for name, path in solvers.items()}
+print(f"Loaded solver CSVs: {list(data.keys())}")
+X_lswt, _ = data['LSWT']
+X_thl, _ = data['THED']
+#X_thl[:, 1, :] = X_lswt[:, 1, :].copy()
+print(X_lswt)
+print(X_thl)
+print(X_lswt - X_thl)
 
 # Checkpoint's saved X_mean has shape (1, C, L), which fixes the input shape
 ckpt_meta = torch.load(args.ckpt, map_location='cpu', weights_only=False)

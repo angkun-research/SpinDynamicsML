@@ -7,7 +7,7 @@ include("triangular_ladder.jl")
 # User parameters
 # -----------------------------
 # [J1, Δ, Jpmpm, Jzpm, J2]
-Js0 = [1.0, 0.7, 0.2, 0.0, 0.051] 
+Js0 = [1,0.541,-0.625,0,0.062] #[1.0, 0.7, 0.2, 0.0, 0.051] 
 dir = [1.0, 0.0, 0.0]
 B_sat, sys, _ = polarized_system(Js0, dir)
 

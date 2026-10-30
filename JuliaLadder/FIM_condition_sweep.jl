@@ -20,7 +20,8 @@ function make_fim_system(Js, B; dims=(1, 1, 1))
     all(isfinite, Js) || throw(ArgumentError("Parameters must be finite"))
     isfinite(B) && B > 0 || throw(ArgumentError("B must be finite and positive"))
 
-    J1, Δ, Jpmpm, Jzpm, J2 = Js
+    #J1, Δ, Jpmpm, Jzpm, J2 = Js
+    J1, Jzz, Jpmpm, Jzpm, J2 = Js
     cryst = triangular_crystal()
 
     sys = System(
@@ -31,10 +32,15 @@ function make_fim_system(Js, B; dims=(1, 1, 1))
         seed=0,
     )
 
+    # Jten = [
+    #     J1 + 2Jpmpm  0.0          Jzpm
+    #     0.0           J1 - 2Jpmpm  0.0
+    #     Jzpm          0.0          J1 * Δ
+    # ]
     Jten = [
         J1 + 2Jpmpm  0.0          Jzpm
         0.0           J1 - 2Jpmpm  0.0
-        Jzpm          0.0          J1 * Δ
+        Jzpm          0.0          Jzz
     ]
 
     set_exchange!(sys, Jten, Bond(1, 1, [1, 0, 0]))
@@ -313,7 +319,7 @@ function run_condition_sweep(;
     fields = Vector{Float64}(undef, length(jzpm_values))
     for col in eachindex(jzpm_values)
         if isnothing(fixed_B)
-            helper_Js = saturation_parameters(parameter_sets[col])
+            helper_Js = parameter_sets[col] #saturation_parameters(parameter_sets[col])
             B, _, _ = polarized_system(helper_Js, [1.0, 0.0, 0.0])
             fields[col] = B
         else

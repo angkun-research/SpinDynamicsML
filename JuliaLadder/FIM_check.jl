@@ -7,7 +7,8 @@ using Sunny
 include("../JuliaLadder/triangular_ladder.jl")
 
 function Run_LSWT(Js,B; dims = (1,1,1),Nk=12, observable=:perp, Qz=0)
-    J1, Δ, Jpmpm, Jzpm, J2 = Js
+    #J1, Δ, Jpmpm, Jzpm, J2 = Js
+    J1, Jzz, Jpmpm, Jzpm, J2 = Js
     #units = Units(:meV, :angstrom)
     a = 1 #4.1149
     c = 5 #22.6911
@@ -24,7 +25,8 @@ function Run_LSWT(Js,B; dims = (1,1,1),Nk=12, observable=:perp, Qz=0)
     #sys = System(cryst, [1 => Moment(s=1/2, g=gtens)], :dipole; dims=(6, 6, 1))
     sys = System(cryst, [1 => Moment(s=1/2, g=gtens)], :dipole; dims=dims)
 
-    J1_ten  = [J1+2Jpmpm 0 Jzpm; 0 J1-2Jpmpm 0; Jzpm 0 J1*Δ]
+    #J1_ten  = [J1+2Jpmpm 0 Jzpm; 0 J1-2Jpmpm 0; Jzpm 0 J1*Δ]
+    J1_ten  = [J1+2Jpmpm 0 Jzpm; 0 J1-2Jpmpm 0; Jzpm 0 Jzz]
     set_exchange!(sys, J1_ten, Bond(1, 1, [1, 0, 0]))
     set_exchange!(sys, J2, Bond(1, 1, [1, 2, 0]))
     #set_field!(sys, [B, 0, 0] * units.T)
@@ -70,7 +72,8 @@ function Run_Ladder(Js, B;
     end
 
     # The ladder helper takes Jzz, whereas the FIM parameters use Δ = Jzz/J1.
-    J1, Δ, Jpmpm, Jzpm, J2 = Js
+    #J1, Δ, Jpmpm, Jzpm, J2 = Js
+    J1, Jzz, Jpmpm, Jzpm, J2 = Js
     a = 1 #4.1149
     c = 5 #22.6911
     latvecs = lattice_vectors(a, a, c, 90, 90, 120)
@@ -79,7 +82,8 @@ function Run_Ladder(Js, B;
     gtens = 1
     sys = System(cryst, [1 => Moment(s=1/2, g=gtens)], :dipole; dims=dims)
 
-    J1_ten  = [J1+2Jpmpm 0 Jzpm; 0 J1-2Jpmpm 0; Jzpm 0 J1*Δ]
+    #J1_ten  = [J1+2Jpmpm 0 Jzpm; 0 J1-2Jpmpm 0; Jzpm 0 J1*Δ]
+    J1_ten  = [J1+2Jpmpm 0 Jzpm; 0 J1-2Jpmpm 0; Jzpm 0 Jzz]
     set_exchange!(sys, J1_ten, Bond(1, 1, [1, 0, 0]))
     set_exchange!(sys, J2, Bond(1, 1, [1, 2, 0]))
     set_field!(sys, [B, 0, 0])
@@ -236,8 +240,8 @@ end
 println("FIM_identifiability.jl — example run")
     # Example 4-parameter anisotropy point (adjust to your model dimensionality)
 #J0 = [1.0,0.7,0.2,0.01,0.051] #[1.0,0.2,0.1,0.05, 0.5]
-J0 = [1.0,0.7,0.2,0.2,0.051]
-Qz = 1
+J0 = [1.0,0.7,0.2,0.01,0.051] #[1.0,0.2,0.1,0.05, 0.5]
+Qz = 0
 println("Qz: ", Qz)
 println("Computing FIM at J0 = ", J0)
 observable = :perp #:tensor #:perp
@@ -252,7 +256,7 @@ else
     B, sys, sat = polarized_system(J0, [1,0,0])
 end
 println("Initial B_sat: ", sat.B_sat)
-Nk = 12
+Nk = 12 #60
 println("B_set: ", B, ", Nk: ", Nk)
 res = compute_FIM(J0; backend=backend, delta=1e-3, B=B, Nk=Nk, 
     observable=observable, tensor_components=tensor_components, Qz=Qz)

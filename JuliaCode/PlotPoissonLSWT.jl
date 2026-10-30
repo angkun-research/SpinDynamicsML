@@ -105,7 +105,7 @@ seed = 1234
 Random.seed!(seed)
 
 B_sat, _ = determine_B_sat(Js, dir)
-B = B_sat * 1.1
+B = 60 #B_sat * 1.1 + 10
 
 disp, inten, path = run_lswt(Js, B;nqp=100)
 energies, scalar1 = broaden_lswt_peaks(disp, inten; fwhm=fwhm)
@@ -265,6 +265,6 @@ display(fig)
 # -----------------------------
 # Save
 # -----------------------------
-# mkpath("./plots")
-# savefig(fig, "./plots/Poisson_LSWT_demo.pdf")
+mkpath("./plots")
+savefig(fig, "./plots/Poisson_LSWT_demo.pdf")
 # savefig(fig, "./plots/Poisson_LSWT_demo.png")
