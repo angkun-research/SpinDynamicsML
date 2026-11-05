@@ -1,45 +1,70 @@
 import os
 import json
+import sys
+
 import numpy as np
 import pandas as pd
 import torch
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
-import sys
+
+# Make repository-root imports available when running HPCtemp/*.py
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from pythonML.AutoEncoderClassNew import Conv1Dminimal
+from pythonML.utils import add_bandwidth_noise, apply_standardizer
 
+# ============================================================
+# Configuration
+# ============================================================
 
-# =========================
-# User config
-# =========================
-CSV_PATH = "./data/triangular_anisotropy_uniform_Js4_B60_Nk250_NJ30.csv"
-CKPT_PATH = "./data/ConvChannel_anisotropy_LSWT_Js4_Nk250_sigma0.1.pth"
+# CSV_PATH = './data/HaoResults/THL_dataset08_Js5_Scalar_Qz2_Nk12_Filter20.csv'
+# CKPT_PATH = "./data/ConvChannel_tensor_LSWT_Js5_Nk12_Ne20_sigma0.0_unitless.pth"
+
+CSV_PATH = './data/triangular_tensor_uniform_Js5_Bdep_Nk60_NJ20_unitless.csv'
+CKPT_PATH = "./data/ConvChannel_tensor_LSWT_Js5_Nk60_sigma0.0_unitless.pth"
 
 OUT_DIR = "./plots"
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# Model config for this checkpoint family
-LATENT_DIM = 4
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# Must match AE_Lanczos_variance.py
+N_PARAMETERS = 5
+N_COMPONENTS = 6 #1 #6
 HIDDEN_DIM = 64
-HAS_VARIANCE = True
-IF_DECODE = True
 
-# Match your previous split style
+# AE_Lanczos_variance.py currently uses these values.
+# Despite the filename, has_variance=False in that script.
+HAS_VARIANCE = False
+IF_DECODE = False
+
+# Match the training split
 TRAIN_RATIO = 0.9
 SPLIT_SEED = 1234
 
-# Evaluate on: "test", "train", or "all"
+# Evaluate on "test", "train", or "all"
 EVAL_SPLIT = "test"
 
-# Optional: inject bandwidth noise before inference
-APPLY_INPUT_NOISE = True
-NOISE_SIGMA = 0.1
+# Match the noisy training input
+NOISE_SIGMA = 0.0
 NOISE_SEED = 1234
 
+BATCH_SIZE = 512
+
+LABEL_LIST = [
+    r"$J_1^0$",
+    r"$J_1^0\Delta$",
+    r"$J_{\pm\pm}$",
+    r"$J_{z\pm}$",
+    r"$J_2^0$",
+]
+
+
+# ============================================================
 # Plot style
+# ============================================================
+
 plt.rcParams["font.family"] = "serif"
 plt.rcParams["font.serif"] = ["Times New Roman"]
 plt.rcParams["mathtext.fontset"] = "custom"
@@ -48,208 +73,375 @@ plt.rcParams["mathtext.it"] = "Times New Roman:italic"
 plt.rcParams["mathtext.bf"] = "Times New Roman:bold"
 
 
-def to_numpy(x):
-    if isinstance(x, np.ndarray):
-        return x.astype(np.float32)
-    if torch.is_tensor(x):
-        return x.detach().cpu().numpy().astype(np.float32)
-    return np.asarray(x, dtype=np.float32)
+# ============================================================
+# Data handling
+# ============================================================
 
+def load_data(csv_path, num_J=5):
+    """
+    Load and reshape the Lanczos dataset exactly as in
+    AE_Lanczos_variance.py.
 
-def load_data(csv_path):
+    Raw CSV layout:
+        dispersion: (N, n_components * n_k * n_energies)
+        intensity:  (N, n_components * n_k * n_energies)
+
+    Model layout:
+        X: (N, 2 * n_components * n_energies, n_k)
+    """
     df = pd.read_csv(csv_path)
-    for col in ["data", "disp", "Js"]:
-        df[col] = df[col].apply(json.loads)
 
-    disp = np.array(df["disp"].tolist(), dtype=np.float32)   # (N, L)
-    inten = np.array(df["data"].tolist(), dtype=np.float32)  # (N, L)
-    X_raw = np.stack([disp, inten], axis=1)                  # (N, 2, L)
+    cols_for_X = ['disp', 'IntSxx', 'IntSyy', 'IntSzz', 'IntSxy', 'IntSxz', 'IntSyz']
+    X = np.stack([
+        np.array([json.loads(v) if isinstance(v, str) else v for v in df[col]], dtype=np.float32)
+        for col in cols_for_X
+    ], axis=1)
+    y = np.array([json.loads(v) if isinstance(v, str) else v for v in df['Js']], dtype=np.float32)
+    if num_J == 4:
+        y = np.delete(y, 3, axis=1)  # remove 4th column (0-based index)
 
-    y = np.array(df["Js"].tolist(), dtype=np.float32)        # (N, 4)
+    # Match training: discard rows containing zero-valued parameters.
+    mask = (y != 0).all(axis=1)
+    X = X[mask]
+    y = y[mask]
+
+    # Match training target convention.
     y[:, 1] *= y[:, 0]
-    return X_raw, y
 
+    print(f"Total CSV samples: {len(df)}")
+    print(f"Filtered samples: {len(y)}")
+    print(f"Input shape: {X.shape}")
+    print(f"Target shape: {y.shape}")
+    print(f"Nk={X.shape[2]}")
 
-def add_bandwidth_noise(X, sigma, seed=1234, intensity_channel=1):
-    rng = np.random.default_rng(seed)
-    eps = rng.normal(0.0, 1.0, size=X.shape).astype(np.float32)
-
-    max_vals = X.max(axis=2, keepdims=True)
-    min_vals = X.min(axis=2, keepdims=True)
-
-    bandwidth = max_vals - min_vals
-    bandwidth[:, intensity_channel:intensity_channel + 1, :] = max_vals[:, intensity_channel:intensity_channel + 1, :]
-    return X + sigma * bandwidth * eps
+    return X, y
 
 
 def split_indices(n_total, train_ratio=0.9, split_seed=1234):
+    """
+    Reproduce torch.utils.data.random_split after set_seed(1234)
+    in AE_Lanczos_variance.py.
+    """
     n_train = int(train_ratio * n_total)
-    g = torch.Generator().manual_seed(split_seed)
-    perm = torch.randperm(n_total, generator=g).numpy()
-    train_idx = perm[:n_train]
-    test_idx = perm[n_train:]
-    return train_idx, test_idx
+
+    generator = torch.Generator().manual_seed(split_seed)
+    permutation = torch.randperm(
+        n_total,
+        generator=generator,
+    ).cpu().numpy()
+
+    train_indices = permutation[:n_train]
+    test_indices = permutation[n_train:]
+
+    return train_indices, test_indices
 
 
-def build_model(input_length, in_channels=2):
+# ============================================================
+# Model handling
+# ============================================================
+
+def to_numpy(value):
+    if isinstance(value, np.ndarray):
+        return value.astype(np.float32)
+
+    if torch.is_tensor(value):
+        return value.detach().cpu().numpy().astype(np.float32)
+
+    return np.asarray(value, dtype=np.float32)
+
+
+def load_model_and_stats(checkpoint_path, input_shape):
+    """
+    Rebuild Conv1Dminimal using the dimensions stored in the
+    preprocessed input and load the trained checkpoint.
+    """
+    if not os.path.exists(checkpoint_path):
+        raise FileNotFoundError(
+            f"Checkpoint not found:\n{checkpoint_path}\n\n"
+            "Check the Nk value in CKPT_PATH. The exact checkpoint name "
+            "is printed by AE_Lanczos_variance.py after training."
+        )
+
+    checkpoint = torch.load(
+        checkpoint_path,
+        map_location=DEVICE,
+        weights_only=False,
+    )
+
+    _, input_channels, input_length = input_shape
+
     model = Conv1Dminimal(
-        in_channels=in_channels,
+        in_channels=input_channels,
         input_length=input_length,
         hidden_dim=HIDDEN_DIM,
-        latent_dim=LATENT_DIM,
+        latent_dim=N_PARAMETERS,
         has_variance=HAS_VARIANCE,
         ifdecode=IF_DECODE,
-    )
-    return model
+    ).to(DEVICE)
 
-
-def load_model_and_stats(ckpt_path, input_length):
-    ckpt = torch.load(ckpt_path, map_location=DEVICE, weights_only=False)
-
-    model = build_model(input_length=input_length, in_channels=2).to(DEVICE)
-    model.load_state_dict(ckpt["model_state"], strict=True)
+    model.load_state_dict(checkpoint["model_state"], strict=True)
     model.eval()
 
-    X_mean = to_numpy(ckpt["X_mean"])
-    X_std = to_numpy(ckpt["X_std"])
+    X_mean = to_numpy(checkpoint["X_mean"])
+    X_std = to_numpy(checkpoint["X_std"])
+
+    print(f"Loaded checkpoint: {checkpoint_path}")
+    print(f"Model input channels: {input_channels}")
+    print(f"Model input length: {input_length}")
+    print(f"Device: {DEVICE}")
+
     return model, X_mean, X_std
 
 
 @torch.no_grad()
-def predict_mu_var(model, X_raw, X_mean, X_std, batch_size=512):
-    Xn = (X_raw - X_mean) / X_std
-    n = Xn.shape[0]
+def predict(model, X_raw, X_mean, X_std, batch_size=512):
+    """
+    Standardize input using checkpoint statistics and predict the
+    five latent Hamiltonian parameters.
+    """
+    X_standardized = apply_standardizer(X_raw, X_mean, X_std)
 
-    mu_list = []
-    std_list = []
+    predictions = []
 
-    for s in range(0, n, batch_size):
-        e = min(s + batch_size, n)
-        xb = torch.from_numpy(Xn[s:e].astype(np.float32)).to(DEVICE)
-        out = model(xb)
+    for start in range(0, len(X_standardized), batch_size):
+        end = min(start + batch_size, len(X_standardized))
 
-        mu = out["mu"].detach().cpu().numpy()
-        var = out["var"].detach().cpu().numpy() if out["var"] is not None else None
+        X_batch = torch.from_numpy(
+            X_standardized[start:end].astype(np.float32)
+        ).to(DEVICE)
 
-        mu_list.append(mu)
-        if var is None:
-            std_list.append(np.full_like(mu, np.nan, dtype=np.float32))
+        output = model(X_batch)
+
+        # Conv1Dminimal returns a dictionary.
+        if isinstance(output, dict):
+            prediction = output["mu"]
         else:
-            std_list.append(np.sqrt(np.maximum(var, 0.0)))
+            prediction = output
 
-    y_pred = np.concatenate(mu_list, axis=0)
-    y_std = np.concatenate(std_list, axis=0)
-    return y_pred, y_std
+        predictions.append(prediction.detach().cpu().numpy())
 
+    return np.concatenate(predictions, axis=0)
+
+
+# ============================================================
+# Metrics and plotting
+# ============================================================
 
 def r2_score_np(y_true, y_pred):
-    ss_res = np.sum((y_true - y_pred) ** 2)
-    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
-    if ss_tot < 1e-12:
+    residual_sum = np.sum((y_true - y_pred) ** 2)
+    total_sum = np.sum((y_true - np.mean(y_true)) ** 2)
+
+    if total_sum < 1e-12:
         return np.nan
-    return 1.0 - ss_res / ss_tot
+
+    return 1.0 - residual_sum / total_sum
 
 
-def add_error_inset(ax, errors, bins=35):
-    axins = inset_axes(ax, width="38%", height="38%", loc="lower right", borderpad=1.0)
-    axins.hist(errors, bins=bins, color="#4c72b0", alpha=0.85, edgecolor="white")
-    axins.axvline(0.0, color="r", linestyle="--", linewidth=1.0)
-    axins.set_xlabel("Error (pred - true)", fontsize=6)
-    axins.set_ylabel("Density", fontsize=6)
-    axins.set_xticks([])
-    axins.set_yticks([])
-    axins.grid(alpha=0.15)
+def add_error_inset(ax, errors):
+    inset = inset_axes(ax,width="42%",height="42%",loc="lower right",borderpad=1.2)
 
-    mean_e = np.mean(errors)
-    std_e = np.std(errors)
+    mean_error = np.mean(errors)
+    std_error = np.std(errors)
     mae = np.mean(np.abs(errors))
-    axins.text(
-        0.05,
-        0.95,
-        f"mean={mean_e:.3f}\nstd={std_e:.3f}\nmae={mae:.3f}",
-        transform=axins.transAxes,
+
+    # Four bins per standard deviation.
+    scale = max(float(std_error), 1e-8)
+    bin_width = scale / 1.5
+    # Include all errors, including long tails.
+    left = np.floor((errors.min() - mean_error) / bin_width)
+    right = np.ceil((errors.max() - mean_error) / bin_width)
+    right = max(right, left + 1)
+    bin_edges = mean_error + np.arange(left, right + 1) * bin_width
+    
+    inset.hist(errors,bins=bin_edges,color="#4c72b0",alpha=0.85,edgecolor="white",
+        density=True,linewidth=0.01)
+    inset.axvline(0.0,color="red",linestyle="--",linewidth=1.0)
+
+    error_width = 12 * std_error
+    shift_center = mean_error*5
+    inset.set_xlim(shift_center - error_width, shift_center + error_width)
+    inset.set_xticks([])
+    inset.set_yticks([])
+    inset.set_xlabel("Error (pred - true)",fontsize=8)
+    inset.set_ylabel("Density",fontsize=8)
+    inset.grid(alpha=0.15)
+
+    inset.text(
+        0.05,0.95,
+        (
+            f"mean={mean_error:.3f}\n"
+            f"std={std_error:.3f}\n"
+            f"mae={mae:.3f}"
+        ),
+        transform=inset.transAxes,
         va="top",
-        fontsize=7,
-        bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
+        fontsize=9,
+        bbox=dict(
+            boxstyle="round",
+            facecolor="white",
+            alpha=0.6,
+        ),
     )
-    return axins
 
 
-def plot_parity_with_error_insets(y_true, y_pred, labels, out_path):
-    n_params = y_true.shape[1]
-    fig, axes = plt.subplots(1, 4, figsize=(16, 4), constrained_layout=True)
+def plot_parity_with_error_insets(
+    y_true,
+    y_pred,
+    labels,
+    output_path,
+):
+    n_parameters = y_true.shape[1]
 
-    for i in range(n_params):
-        ax = axes[i]
-        t = y_true[:, i]
-        p = y_pred[:, i]
-        err = p - t
+    figure, axes = plt.subplots(
+        1,
+        n_parameters,
+        figsize=(2.6 * n_parameters, 2.6), #(4.2 * n_parameters, 4.2),
+        constrained_layout=True,
+    )
 
-        lo = min(t.min(), p.min())
-        hi = max(t.max(), p.max())
-        pad = 0.05 * (hi - lo + 1e-8)
-        lo, hi = lo - pad, hi + pad
+    # Ensure axes is iterable even if configuration changes to one parameter.
+    axes = np.atleast_1d(axes)
 
-        ax.scatter(t, p, s=12, alpha=0.45, color="#1f77b4", linewidths=0)
-        ax.plot([lo, hi], [lo, hi], "r--", linewidth=1.4)
-        ax.set_xlim(lo, hi)
-        ax.set_ylim(lo, hi)
-        ax.set_xlabel("True")
-        ax.set_ylabel("Predicted")
-        ax.set_title(labels[i])
+    for parameter_index in range(n_parameters):
+        ax = axes[parameter_index]
+
+        true_values = y_true[:, parameter_index]
+        predicted_values = y_pred[:, parameter_index]
+        errors = predicted_values - true_values
+
+        lower = min(true_values.min(), predicted_values.min())
+        upper = max(true_values.max(), predicted_values.max())
+
+        padding = 0.05 * (upper - lower + 1e-8)
+        lower -= padding
+        upper += padding
+
+        ax.scatter(
+            true_values,
+            predicted_values,
+            s=12,
+            alpha=0.45,
+            color="#1f77b4",
+            linewidths=0,
+        )
+
+        ax.plot(
+            [lower, upper],
+            [lower, upper],
+            "r--",
+            linewidth=1.4,
+        )
+
+        ax.set_xlim(lower, upper)
+        ax.set_ylim(lower, upper)
+        ax.set_xlabel("True", fontsize=12)
+        ax.set_ylabel("Predicted", fontsize=12)
+        ax.set_title(labels[parameter_index], fontsize=14,pad=8)
         ax.grid(alpha=0.25)
 
-        mae = np.mean(np.abs(err))
-        rmse = np.sqrt(np.mean(err ** 2))
-        r2 = r2_score_np(t, p)
+        mae = np.mean(np.abs(errors))
+        rmse = np.sqrt(np.mean(errors ** 2))
+        r2 = r2_score_np(true_values, predicted_values)
+
         ax.text(
             0.04,
             0.96,
-            f"MAE={mae:.4f}\nRMSE={rmse:.4f}\nR2={r2:.4f}",
+            (
+                f"MAE={mae:.4f}\n"
+                f"RMSE={rmse:.4f}\n"
+                f"$R^2$={r2:.4f}"
+            ),
             transform=ax.transAxes,
             va="top",
-            fontsize=9,
-            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
+            fontsize=12,
+            bbox=dict(
+                boxstyle="round",
+                facecolor="white",
+                alpha=0.8,
+            ),
         )
 
-        add_error_inset(ax, err)
+        add_error_inset(ax, errors)
 
-    fig.savefig(out_path, format="pdf", bbox_inches="tight")
-    plt.close(fig)
+    figure.savefig(
+        output_path,
+        format="pdf",
+        bbox_inches="tight",
+    )
+    plt.close(figure)
 
+
+# ============================================================
+# Main
+# ============================================================
 
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
 
-    X_raw, y = load_data(CSV_PATH)
-    n, c, L = X_raw.shape
-    assert c == 2, "Expected channels [dispersion, intensity]."
+    X_raw, y = load_data(CSV_PATH, num_J=N_PARAMETERS)
 
-    train_idx, test_idx = split_indices(n, train_ratio=TRAIN_RATIO, split_seed=SPLIT_SEED)
+    train_indices, test_indices = split_indices(
+        len(X_raw),
+        train_ratio=TRAIN_RATIO,
+        split_seed=SPLIT_SEED,
+    )
 
     if EVAL_SPLIT == "train":
-        idx = train_idx
+        evaluation_indices = train_indices
     elif EVAL_SPLIT == "test":
-        idx = test_idx
+        evaluation_indices = test_indices
+    elif EVAL_SPLIT == "all":
+        evaluation_indices = np.arange(len(X_raw))
     else:
-        idx = np.arange(n)
+        raise ValueError(
+            f"Unknown EVAL_SPLIT={EVAL_SPLIT!r}. "
+            "Choose 'train', 'test', or 'all'."
+        )
 
-    X_eval = X_raw[idx].copy()
-    y_eval = y[idx].copy()
+    X_eval = X_raw[evaluation_indices].copy()
+    y_eval = y[evaluation_indices].copy()
 
-    if APPLY_INPUT_NOISE:
-        X_eval = add_bandwidth_noise(X_eval, sigma=NOISE_SIGMA, seed=NOISE_SEED)
+    X_eval = add_bandwidth_noise(X_eval,sigma=NOISE_SIGMA,seed=NOISE_SEED)
 
-    model, X_mean, X_std = load_model_and_stats(CKPT_PATH, input_length=L)
-    y_pred, y_pred_std = predict_mu_var(model, X_eval, X_mean, X_std, batch_size=512)
+    model, X_mean, X_std = load_model_and_stats(CKPT_PATH,input_shape=X_raw.shape,)
 
-    labels = [r"$J_1$", r"$J_1\Delta$", r"$J_{\pm\pm}$", r"$J_2$"]
+    y_pred = predict(model,X_eval,X_mean,X_std,batch_size=BATCH_SIZE,)
 
-    parity_path = os.path.join(OUT_DIR, "Js4_sigma0p1_pred_vs_true_inset_error.pdf")
-    plot_parity_with_error_insets(y_eval, y_pred, labels, parity_path)
+    output_name = (
+        f"Js5_sigma{NOISE_SIGMA}_tensor_LSWT_error.pdf"
+    )
+    output_path = os.path.join(OUT_DIR, output_name)
 
-    print(f"Saved figure: {parity_path}")
-    print(f"Eval split: {EVAL_SPLIT}, N={len(idx)}, noise_applied={APPLY_INPUT_NOISE}, sigma={NOISE_SIGMA}")
+    plot_parity_with_error_insets(
+        y_true=y_eval,
+        y_pred=y_pred,
+        labels=LABEL_LIST,
+        output_path=output_path,
+    )
+
+    errors = y_pred - y_eval
+
+    print(f"Saved figure: {output_path}")
+    print(f"Evaluation split: {EVAL_SPLIT}")
+    print(f"Evaluation samples: {len(evaluation_indices)}")
+    print(f"Noise sigma: {NOISE_SIGMA}")
+
+    print("\nParameter metrics:")
+    for parameter_index, label in enumerate(LABEL_LIST):
+        parameter_errors = errors[:, parameter_index]
+        mae = np.mean(np.abs(parameter_errors))
+        rmse = np.sqrt(np.mean(parameter_errors ** 2))
+        r2 = r2_score_np(
+            y_eval[:, parameter_index],
+            y_pred[:, parameter_index],
+        )
+
+        print(
+            f"{label}: "
+            f"MAE={mae:.6f}, "
+            f"RMSE={rmse:.6f}, "
+            f"R2={r2:.6f}"
+        )
 
 
 if __name__ == "__main__":

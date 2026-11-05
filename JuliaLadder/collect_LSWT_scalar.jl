@@ -21,8 +21,8 @@ end
 
 
 Jsize = 4 #5 #4
-N_uniform = 30 #30
-Nk = 60 #12
+N_uniform = 20 #30
+Nk = 1000 #12
 Nsamples = 2*N_uniform^(Jsize-1)
 Js_all = Vector{Float64}[]
 for J10 in [-1,1]
@@ -99,3 +99,6 @@ end
 results = DataFrame(rows)
 CSV.write("../data/triangular_scalar_uniform_Js$(Jsize)_Bdep_Nk$(Nk)_NJ$(N_uniform)_QZ$(QZ)_unitless.csv", results)
 println("saved results to data")
+
+# run without interaption:
+# nohup julia --project=. -t 16 collect_LSWT_scalar.jl > collect_LSWT_scalar_J4_Nk1000_NJ20_QZ0.log 2>&1 &

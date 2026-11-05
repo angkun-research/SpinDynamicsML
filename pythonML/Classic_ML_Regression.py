@@ -21,7 +21,8 @@ warnings.filterwarnings('ignore') # Suppress warnings for cleaner output
 # ------ Config ------
 #CSV_PATH    = './data/triangular_anisotropy_uniform_Js4_B50_Nk20_NJ30.csv'
 #CSV_PATH = './data/HaoResults/Hao_anisotropy_Js4_uniform_trace_Filter100_Bsats.csv'
-CSV_PATH = './data/HaoResults/THL_dataset01_Js4_Scalar_Qz0_Nk12_Filter20.csv'
+#CSV_PATH = './data/HaoResults/THL_dataset01_Js4_Scalar_Qz0_Nk12_Filter20.csv'
+CSV_PATH = './data/triangular_scalar_uniform_Js4_Bdep_Nk20_NJ20_QZ0_unitless.csv'
 SEED        = 1234
 TRAIN_RATIO = 0.9
 GPR_MAX_TRAIN = 2000
@@ -122,8 +123,8 @@ def mse(y_pred, y_true):
 # ------ Main ------
 np.random.seed(SEED)
 
-#X, y = load_raw_data_LSWT(CSV_PATH)
-X, y = load_raw_data_lanczos(CSV_PATH)
+X, y = load_raw_data_LSWT(CSV_PATH)
+#X, y = load_raw_data_lanczos(CSV_PATH)
 train_idx, test_idx = split_indices(len(X), TRAIN_RATIO, SEED)
 X_train, y_train = X[train_idx], y[train_idx]
 X_test,  y_test  = X[test_idx],  y[test_idx]

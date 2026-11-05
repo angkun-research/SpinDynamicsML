@@ -23,7 +23,7 @@ end
 
 Jsize = 4
 N_uniform = 20
-Nk=60
+Nk = 20
 Nsamples = 2*N_uniform^(Jsize-1)
 Js_all = Vector{Float64}[]
 for J10 in [-1,1]
@@ -94,4 +94,8 @@ end
 
 println("Total rows collected: ", length(rows))
 results = DataFrame(rows)
-CSV.write("data/triangular_tensor_uniform_Js$(Jsize)_Bdep_Nk$(Nk)_NJ$(N_uniform)_unitless.csv", results)
+CSV.write("../data/triangular_tensor_uniform_Js$(Jsize)_Bdep_Nk$(Nk)_NJ$(N_uniform)_unitless.csv", results)
+
+
+# run without interaption:
+# nohup julia --project=. -t 16 collect_LSWT_tensor.jl > collect_LSWT_tensor_J4_Nk20.log 2>&1 &

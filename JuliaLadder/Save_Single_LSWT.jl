@@ -8,13 +8,16 @@ include("triangular_ladder.jl")
 # User parameters
 # -----------------------------
 #Js = [ 1.008152, -0.874677,  0.864058, 0.0, -1.004507]   # [J1, Δ, Jpmpm, Jzpm, J2]
-Js = [0.953,-0.302,-0.570,0,0.016] #1,0.541,-0.625,0,0.062] #[1.0, 0.7, 0.2, 0.0, 0.051] 
+#Js = [0.953,-0.302,-0.570,0,0.016] #1,0.541,-0.625,0,0.062] #[1.0, 0.7, 0.2, 0.0, 0.051] 
+Js0 = [-1. ,  -0.9, -0.8,0.0, -0.5]
+#Js = [-1.007081,  -0.909175, -0.799702,0.0, -0.495803]
+Js = [-0.987385,  -0.883141, -0.80252 ,0.0, -0.506883]
 dir = [1.0, 0.0, 0.0]
-B_sat, sys, _ = polarized_system(Js, [1,0,0])
+B_sat, sys, _ = polarized_system(Js0, [1,0,0])
 println("B_sat = ", B_sat)
 QZ = 0
 qs = [[0, 0, QZ], [1, 1, QZ]]
-Nk = 60
+Nk = 250
 path = q_space_path(sys.crystal,qs,Nk)
 # -----------------------------
 # Build LSWT result 
@@ -30,9 +33,7 @@ push!(results, (
     vec(res.disp),
 ))
 # print(res.data)
-# CSV.write("../data/LSWT_Js4_Bdep_Nk$(Nk)_test_unitless.csv", results)
-# println("saved results to data")
-
-
-CSV.write("../data/THL_Js4_Nk60_Ne1.csv", results)
+CSV.write("../data/LSWT_Js4_Bdep_Nk$(Nk)_test_1_unitless.csv", results)
 println("saved results to data")
+
+
